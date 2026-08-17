@@ -160,6 +160,7 @@ class TranslateView(QWidget):
         self.provider_combo.addItem("Auto Failover (All Available Keys)", "auto")
         self.provider_combo.addItem("Prefer Gemini", ProviderType.GEMINI.value)
         self.provider_combo.addItem("Prefer Groq", ProviderType.GROQ.value)
+        self.provider_combo.addItem("Prefer OrCarRouter", ProviderType.ORCAROUTER.value)
         config_layout.addWidget(self.provider_combo, 2, 1)
 
         # Buttons in Config Card

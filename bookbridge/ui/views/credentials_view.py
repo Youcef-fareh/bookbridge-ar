@@ -27,6 +27,7 @@ from bookbridge.database.repositories.credential_repo import CredentialRepositor
 from bookbridge.models.provider import ProviderCredentialMetadata
 from bookbridge.providers.gemini import GeminiProvider
 from bookbridge.providers.groq import GroqProvider
+from bookbridge.providers.orcarouter import OrCarRouterProvider
 from bookbridge.security.keyring_manager import keyring_manager
 
 
@@ -42,6 +43,7 @@ class CredentialDialog(QDialog):
         self.provider_combo = QComboBox()
         self.provider_combo.addItem("Google Gemini", ProviderType.GEMINI.value)
         self.provider_combo.addItem("Groq", ProviderType.GROQ.value)
+        self.provider_combo.addItem("OrCarRouter", ProviderType.ORCAROUTER.value)
         self.provider_combo.currentIndexChanged.connect(self._on_provider_changed)
         form.addRow("AI Provider:", self.provider_combo)
 
@@ -75,6 +77,8 @@ class CredentialDialog(QDialog):
         prov = self.provider_combo.currentData()
         if prov == ProviderType.GEMINI.value:
             models = GeminiProvider().get_supported_models()
+        elif prov == ProviderType.ORCAROUTER.value:
+            models = OrCarRouterProvider().get_supported_models()
         else:
             models = GroqProvider().get_supported_models()
         for m in models:
@@ -94,7 +98,12 @@ class CredentialDialog(QDialog):
             model=model_val,
         )
 
-        provider_inst = GeminiProvider() if prov_val == ProviderType.GEMINI.value else GroqProvider()
+        if prov_val == ProviderType.GEMINI.value:
+            provider_inst = GeminiProvider()
+        elif prov_val == ProviderType.ORCAROUTER.value:
+            provider_inst = OrCarRouterProvider()
+        else:
+            provider_inst = GroqProvider()
 
         loop = asyncio.new_event_loop()
         try:

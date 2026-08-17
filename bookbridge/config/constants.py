@@ -47,6 +47,7 @@ class CredentialState(str, Enum):
 class ProviderType(str, Enum):
     GEMINI = "gemini"
     GROQ = "groq"
+    ORCAROUTER = "orcarouter"
     OPENAI = "openai"
     ANTHROPIC = "anthropic"
     OLLAMA = "ollama"
@@ -90,6 +91,7 @@ TOKEN_PATTERN = r"<NB_TERM_(\d+)>"
 # Default Model Constants
 DEFAULT_GEMINI_MODEL = "gemini-2.5-flash"
 DEFAULT_GROQ_MODEL = "llama-3.3-70b-versatile"
+DEFAULT_ORCAROUTER_MODEL = "qwen/qwen3.8-27b-free"
 
 # Rate limit & Backoff Defaults
 DEFAULT_COOLDOWN_SECONDS = 60

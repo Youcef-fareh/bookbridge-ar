@@ -12,6 +12,7 @@ from bookbridge.models.style import StylePromptConfig
 from bookbridge.providers.base import TranslationProvider
 from bookbridge.providers.gemini import GeminiProvider
 from bookbridge.providers.groq import GroqProvider
+from bookbridge.providers.orcarouter import OrCarRouterProvider
 from bookbridge.providers.mock import MockProvider
 from bookbridge.routing.state_machine import CredentialStateMachine
 from bookbridge.security.keyring_manager import keyring_manager
@@ -25,6 +26,7 @@ class TranslationRouter:
         self._providers: Dict[ProviderType, TranslationProvider] = {
             ProviderType.GEMINI: GeminiProvider(),
             ProviderType.GROQ: GroqProvider(),
+            ProviderType.ORCAROUTER: OrCarRouterProvider(),
             ProviderType.MOCK: MockProvider(),
         }
 

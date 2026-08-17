@@ -3,9 +3,12 @@
 import pytest
 from bookbridge.config.constants import CredentialState, ProviderType, TranslationStyleType
 from bookbridge.database.repositories.credential_repo import CredentialRepository
+from bookbridge.config.constants import ProviderType
 from bookbridge.models.provider import ProviderCredentialMetadata
 from bookbridge.models.style import STYLE_PRESETS
+from bookbridge.providers.groq import GroqProvider
 from bookbridge.providers.mock import MockProvider
+from bookbridge.providers.orcarouter import OrCarRouterProvider
 from bookbridge.routing.router import TranslationRouter
 from bookbridge.security.keyring_manager import keyring_manager
 
@@ -72,3 +75,23 @@ async def test_router_failover_on_429():
     updated_b = cred_repo.get_credential("cred_test_b")
     assert updated_b.state == CredentialState.AVAILABLE
     assert updated_b.success_count >= 1
+
+
+def test_groq_model_alias_and_supported_models():
+    provider = GroqProvider()
+
+    assert "llama-3.3-70b-versatile" in provider.get_supported_models()
+    assert "llama-3.1-70b-versatile" in provider.get_supported_models()
+    assert "meta-llama/llama-4-scout-17b-16e-instruct" in provider.get_supported_models()
+
+    assert provider.resolve_model_name("groq/llama-3.1-8b-instant") == "llama-3.1-8b-instant"
+    assert provider.resolve_model_name("llama-3.1-70b-versatile") == "llama-3.1-70b-versatile"
+    assert provider.resolve_model_name("") == "llama-3.3-70b-versatile"
+
+
+def test_orcarouter_provider_registration_and_supported_models():
+    provider = OrCarRouterProvider()
+    assert ProviderType.ORCAROUTER.value == "orcarouter"
+    assert "qwen/qwen3.8-27b-free" in provider.get_supported_models()
+    assert provider.resolve_model_name("qwen/qwen3.8-27b-free") == "qwen/qwen3.8-27b-free"
+    assert provider.resolve_model_name("") == "qwen/qwen3.8-27b-free"

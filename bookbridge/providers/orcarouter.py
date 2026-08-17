@@ -1,8 +1,10 @@
-"""Groq AI Provider implementation using high-speed Llama models."""
+"""OrCarRouter OpenAI-compatible provider implementation."""
 
 import logging
 from typing import List
+
 import httpx
+
 from bookbridge.config.constants import ProviderType
 from bookbridge.models.job import TranslationResult
 from bookbridge.models.provider import ProviderCredentialMetadata
@@ -12,42 +14,34 @@ from bookbridge.providers.base import TranslationProvider
 logger = logging.getLogger(__name__)
 
 
-class GroqProvider(TranslationProvider):
-    BASE_URL = "https://api.groq.com/openai/v1/chat/completions"
+class OrCarRouterProvider(TranslationProvider):
+    BASE_URL = "https://api.orcarouter.ai/v1/chat/completions"
 
     def get_supported_models(self) -> List[str]:
         return [
-            "llama-3.3-70b-versatile",
-            "llama-3.1-70b-versatile",
-            "llama-3.1-8b-instant",
-            "meta-llama/llama-4-scout-17b-16e-instruct",
-            "mixtral-8x7b-32768",
+            "qwen/qwen3.8-27b-free",
+            "qwen/qwen3-32b-free",
+            "deepseek/deepseek-r1-0528-free",
+            "meta-llama/llama-3.3-70b-instruct",
         ]
 
     def resolve_model_name(self, model_name: str | None) -> str:
-        default_model = "llama-3.3-70b-versatile"
+        default_model = "qwen/qwen3.8-27b-free"
         if not model_name or not model_name.strip():
             return default_model
 
         cleaned = model_name.strip()
+        if cleaned.lower().startswith("orcarouter/"):
+            cleaned = cleaned[11:]
+
         if cleaned.lower().startswith("groq/"):
             cleaned = cleaned[5:]
 
-        canonical = {
-            "llama-3.3-70b-versatile": "llama-3.3-70b-versatile",
-            "llama-3.1-70b-versatile": "llama-3.1-70b-versatile",
-            "llama-3.1-8b-instant": "llama-3.1-8b-instant",
-            "meta-llama/llama-4-scout-17b-16e-instruct": "meta-llama/llama-4-scout-17b-16e-instruct",
-            "mixtral-8x7b-32768": "mixtral-8x7b-32768",
-            "llama-3.3-70b": "llama-3.3-70b-versatile",
-            "llama-3.1-70b": "llama-3.1-70b-versatile",
-            "llama-3.1-8b": "llama-3.1-8b-instant",
-        }
-
-        lowered_key = cleaned.lower()
-        for key, value in canonical.items():
-            if lowered_key == key.lower():
-                return value
+        supported = set(self.get_supported_models())
+        lowered = {m.lower(): m for m in supported}
+        match = lowered.get(cleaned.lower())
+        if match:
+            return match
 
         return cleaned
 
@@ -63,7 +57,8 @@ class GroqProvider(TranslationProvider):
             "1. Output ONLY the translated Arabic text.\n"
             "2. Preserve all protected tokens like <NB_TERM_001>, <NB_TERM_002>, etc. exactly as they appear.\n"
             "3. Maintain original paragraph breaks and line spacing.\n"
-            "4. Do not omit or summarize any text."
+            "4. Do not omit or summarize any text.\n"
+            "5. Do not wrap the answer in markdown code fences."
         )
 
     def _build_user_prompt(self, text: str, context_before: str, context_after: str) -> str:
@@ -127,71 +122,69 @@ class GroqProvider(TranslationProvider):
                             success=True,
                             translated_text=translated_text,
                             source_text=text,
-                            provider=ProviderType.GROQ.value,
+                            provider=ProviderType.ORCAROUTER.value,
                             model=model,
                             credential_id=credential.id,
                             tokens_used=total_tokens,
                         )
-                    else:
-                        return TranslationResult(
-                            success=False,
-                            source_text=text,
-                            provider=ProviderType.GROQ.value,
-                            model=model,
-                            credential_id=credential.id,
-                            error="Groq returned empty choices.",
-                            retryable=False,
-                        )
-
-                elif status == 429:
                     return TranslationResult(
                         success=False,
                         source_text=text,
-                        provider=ProviderType.GROQ.value,
+                        provider=ProviderType.ORCAROUTER.value,
                         model=model,
                         credential_id=credential.id,
-                        error="HTTP 429: Groq Rate Limit Exceeded.",
-                        retryable=True,
-                    )
-                elif status in (401, 403):
-                    return TranslationResult(
-                        success=False,
-                        source_text=text,
-                        provider=ProviderType.GROQ.value,
-                        model=model,
-                        credential_id=credential.id,
-                        error=f"HTTP {status}: Invalid Groq API Key.",
+                        error="OrCarRouter returned empty choices.",
                         retryable=False,
                     )
-                else:
+
+                if status == 429:
                     return TranslationResult(
                         success=False,
                         source_text=text,
-                        provider=ProviderType.GROQ.value,
+                        provider=ProviderType.ORCAROUTER.value,
                         model=model,
                         credential_id=credential.id,
-                        error=f"HTTP {status}: {response.text[:200]}",
-                        retryable=(status >= 500),
+                        error="HTTP 429: OrCarRouter rate limit exceeded.",
+                        retryable=True,
                     )
+                if status in (401, 403):
+                    return TranslationResult(
+                        success=False,
+                        source_text=text,
+                        provider=ProviderType.ORCAROUTER.value,
+                        model=model,
+                        credential_id=credential.id,
+                        error=f"HTTP {status}: Invalid OrCarRouter API key.",
+                        retryable=False,
+                    )
+                return TranslationResult(
+                    success=False,
+                    source_text=text,
+                    provider=ProviderType.ORCAROUTER.value,
+                    model=model,
+                    credential_id=credential.id,
+                    error=f"HTTP {status}: {response.text[:200]}",
+                    retryable=(status >= 500),
+                )
 
             except httpx.TimeoutException:
                 return TranslationResult(
                     success=False,
                     source_text=text,
-                    provider=ProviderType.GROQ.value,
+                    provider=ProviderType.ORCAROUTER.value,
                     model=model,
                     credential_id=credential.id,
-                    error="Groq Request Timeout.",
+                    error="OrCarRouter request timeout.",
                     retryable=True,
                 )
             except Exception as ex:
                 return TranslationResult(
                     success=False,
                     source_text=text,
-                    provider=ProviderType.GROQ.value,
+                    provider=ProviderType.ORCAROUTER.value,
                     model=model,
                     credential_id=credential.id,
-                    error=f"Groq Client Error: {str(ex)}",
+                    error=f"OrCarRouter client error: {str(ex)}",
                     retryable=True,
                 )
 
