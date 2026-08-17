@@ -37,25 +37,27 @@ bookbridge is a desktop application designed for translating novels and books fr
 
 ---
 
-## Installation & Setup
+## Download & Install
+
+### Windows Installer
+Download the latest setup file from the GitHub Releases page and run the installer.
+
+1. Open the latest release on GitHub.
+2. Download `BookBridge-Setup.exe`.
+3. Run the installer and follow the setup wizard.
+4. Once installed, launch BookBridge from the Start menu or desktop shortcut.
 
 ### Prerequisites
-- Python 3.10+ (Python 3.12 recommended)
 - Windows 10 / 11
+- Microsoft Visual C++ Redistributable (usually installed automatically by Windows)
 
-### 1. Clone & Install Dependencies
+### Run from Source
+If you want to run the app directly from source instead of the installer:
+
 ```bash
 cd "c:\projects\New folder\gemin"
 pip install -r requirements.txt
-```
-
-### 2. Run Automated Tests
-```bash
 python -m pytest -v tests/
-```
-
-### 3. Launch the Application
-```bash
 python -m bookbridge.app
 ```
 

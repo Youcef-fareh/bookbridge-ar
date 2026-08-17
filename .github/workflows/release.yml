@@ -1,0 +1,80 @@
+name: Build Windows Release
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*.*.*'
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies
+        shell: powershell
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller==6.10.0
+
+      - name: Build EXE
+        shell: powershell
+        run: |
+          New-Item -ItemType Directory -Force -Path .\dist\app | Out-Null
+          if (Test-Path .\icon.ico) {
+            pyinstaller --noconfirm --clean --onefile --windowed --name BookBridge `
+              --icon .\icon.ico `
+              --add-data "README.md;." `
+              --add-data "sample_data;sample_data" `
+              --distpath .\dist\app `
+              .\bookbridge\app.py
+          } else {
+            pyinstaller --noconfirm --clean --onefile --windowed --name BookBridge `
+              --add-data "README.md;." `
+              --add-data "sample_data;sample_data" `
+              --distpath .\dist\app `
+              .\bookbridge\app.py
+          }
+
+      - name: Install Inno Setup
+        shell: powershell
+        run: |
+          choco install innosetup -y --no-progress
+
+      - name: Build Windows installer
+        shell: powershell
+        run: |
+          New-Item -ItemType Directory -Force -Path .\dist\installer | Out-Null
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" .\installer\BookBridge.iss
+
+      - name: Rename installer artifact
+        shell: powershell
+        run: |
+          if (Test-Path .\dist\installer\BookBridge-Setup.exe) {
+            Rename-Item -Path .\dist\installer\BookBridge-Setup.exe -NewName "BookBridge-Setup.exe" -Force
+          }
+
+      - name: Upload release artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: BookBridge-Windows-Installer
+          path: .\dist\installer\BookBridge-Setup.exe
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: .\dist\installer\BookBridge-Setup.exe
+          generate_release_notes: true
