@@ -17,12 +17,11 @@ class GeminiProvider(TranslationProvider):
 
     def get_supported_models(self) -> List[str]:
         return [
-            "gemini-3.5-flash-lite",
-            "gemini-3.1-flash-lite",
             "gemini-2.5-flash",
+            "gemini-2.5-flash-lite",
+            "gemini-2.0-flash",
             "gemini-1.5-flash",
             "gemini-1.5-pro",
-            "gemini-2.0-flash",
         ]
 
     def _build_system_instructions(
@@ -82,6 +81,7 @@ class GeminiProvider(TranslationProvider):
             "generationConfig": {
                 "temperature": 0.3,
                 "topP": 0.95,
+                "maxOutputTokens": 4096,
             },
         }
 
@@ -101,6 +101,17 @@ class GeminiProvider(TranslationProvider):
                             lines = translated_text.splitlines()
                             if len(lines) >= 2:
                                 translated_text = "\n".join(lines[1:-1]).strip()
+
+                        if not translated_text:
+                            return TranslationResult(
+                                success=False,
+                                source_text=text,
+                                provider=ProviderType.GEMINI.value,
+                                model=model,
+                                credential_id=credential.id,
+                                error="Gemini returned empty translated text (possible safety filter).",
+                                retryable=False,
+                            )
 
                         usage_meta = data.get("usageMetadata", {})
                         tokens_total = usage_meta.get("totalTokenCount", 0)

@@ -173,7 +173,6 @@ class RateLimiter:
     def record_usage(self, cred: ProviderCredentialMetadata, actual_tokens: int) -> None:
         """Updates the sliding window with exact tokens returned by the API."""
         now = time.time()
-        self._last_request_time[cred.id] = now
         window = self._clean_sliding_window(cred.id, now)
         if window:
             # Replace latest entry's estimated token count with actual tokens

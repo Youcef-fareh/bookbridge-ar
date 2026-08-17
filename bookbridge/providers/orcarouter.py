@@ -34,9 +34,6 @@ class OrCarRouterProvider(TranslationProvider):
         if cleaned.lower().startswith("orcarouter/"):
             cleaned = cleaned[11:]
 
-        if cleaned.lower().startswith("groq/"):
-            cleaned = cleaned[5:]
-
         supported = set(self.get_supported_models())
         lowered = {m.lower(): m for m in supported}
         match = lowered.get(cleaned.lower())
