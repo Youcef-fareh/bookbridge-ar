@@ -28,6 +28,7 @@ from bookbridge.models.provider import ProviderCredentialMetadata
 from bookbridge.providers.gemini import GeminiProvider
 from bookbridge.providers.groq import GroqProvider
 from bookbridge.providers.orcarouter import OrCarRouterProvider
+from bookbridge.providers.tokenrouter import TokenRouterProvider
 from bookbridge.security.keyring_manager import keyring_manager
 
 
@@ -43,6 +44,7 @@ class CredentialDialog(QDialog):
         self.provider_combo = QComboBox()
         self.provider_combo.addItem("Google Gemini", ProviderType.GEMINI.value)
         self.provider_combo.addItem("Groq", ProviderType.GROQ.value)
+        self.provider_combo.addItem("TokenRouter", ProviderType.TOKENROUTER.value)
         self.provider_combo.addItem("OrCarRouter", ProviderType.ORCAROUTER.value)
         self.provider_combo.currentIndexChanged.connect(self._on_provider_changed)
         form.addRow("AI Provider:", self.provider_combo)
@@ -52,6 +54,10 @@ class CredentialDialog(QDialog):
 
         self.model_combo = QComboBox()
         form.addRow("Model:", self.model_combo)
+
+        self.limits_info_lbl = QLabel()
+        self.limits_info_lbl.setStyleSheet("color: #38bdf8; font-size: 12px; font-weight: 600;")
+        form.addRow("Strict Limits:", self.limits_info_lbl)
 
         self.key_edit = QLineEdit()
         self.key_edit.setEchoMode(QLineEdit.Password)
@@ -77,10 +83,16 @@ class CredentialDialog(QDialog):
         prov = self.provider_combo.currentData()
         if prov == ProviderType.GEMINI.value:
             models = GeminiProvider().get_supported_models()
+            self.limits_info_lbl.setText("15 RPM  |  240,000 TPM  |  500 RPD (Strict pacing)")
+        elif prov == ProviderType.TOKENROUTER.value:
+            models = TokenRouterProvider().get_supported_models()
+            self.limits_info_lbl.setText("20 RPM  |  60,000 TPM  |  1,000 RPD")
         elif prov == ProviderType.ORCAROUTER.value:
             models = OrCarRouterProvider().get_supported_models()
+            self.limits_info_lbl.setText("20 RPM  |  60,000 TPM  |  1,000 RPD")
         else:
             models = GroqProvider().get_supported_models()
+            self.limits_info_lbl.setText("30 RPM  |  8,000 TPM (Strict token pacing)  |  8,000 RPD")
         for m in models:
             self.model_combo.addItem(m, m)
 
@@ -100,6 +112,8 @@ class CredentialDialog(QDialog):
 
         if prov_val == ProviderType.GEMINI.value:
             provider_inst = GeminiProvider()
+        elif prov_val == ProviderType.TOKENROUTER.value:
+            provider_inst = TokenRouterProvider()
         elif prov_val == ProviderType.ORCAROUTER.value:
             provider_inst = OrCarRouterProvider()
         else:
@@ -155,8 +169,8 @@ class CredentialsView(QWidget):
         sec_card.setProperty("class", "Card")
         sec_layout = QHBoxLayout(sec_card)
         sec_lbl = QLabel(
-            "🔒 <b>Secure Local Storage:</b> API keys are saved exclusively in your OS Keyring / encrypted machine vault. "
-            "Secrets are never logged, never committed, and never sent to central servers."
+            "🔒 <b>Secure Local Storage & Pacing:</b> API keys are saved exclusively in your OS Keyring / encrypted machine vault. "
+            "Strict RPM/TPM/RPD rate-limit pacing prevents quota exhaustion across Gemini, Groq, and TokenRouter."
         )
         sec_lbl.setStyleSheet("color: #94a3b8; font-size: 12px;")
         sec_layout.addWidget(sec_lbl)
@@ -168,9 +182,9 @@ class CredentialsView(QWidget):
         table_layout = QVBoxLayout(table_card)
 
         self.table = QTableWidget()
-        self.table.setColumnCount(8)
+        self.table.setColumnCount(9)
         self.table.setHorizontalHeaderLabels([
-            "Provider", "Name", "Model", "State / Health", "Tokens Used", "Success / Failures", "Cooldown", "Action"
+            "Provider", "Name", "Model", "Strict Limits", "State / Health", "Tokens Used", "Success / Failures", "Cooldown", "Action"
         ])
         self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
         self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
@@ -180,6 +194,7 @@ class CredentialsView(QWidget):
         self.table.horizontalHeader().setSectionResizeMode(5, QHeaderView.ResizeToContents)
         self.table.horizontalHeader().setSectionResizeMode(6, QHeaderView.ResizeToContents)
         self.table.horizontalHeader().setSectionResizeMode(7, QHeaderView.ResizeToContents)
+        self.table.horizontalHeader().setSectionResizeMode(8, QHeaderView.ResizeToContents)
         self.table.verticalHeader().setVisible(False)
         table_layout.addWidget(self.table)
 
@@ -194,24 +209,28 @@ class CredentialsView(QWidget):
             self.table.setItem(r_idx, 1, QTableWidgetItem(c.name))
             self.table.setItem(r_idx, 2, QTableWidgetItem(c.model))
 
+            # Strict limits badge
+            limits_str = f"{c.effective_rpm} RPM | {c.effective_tpm // 1000}k TPM"
+            self.table.setItem(r_idx, 3, QTableWidgetItem(limits_str))
+
             # State badge item
             state_item = QTableWidgetItem(c.state.value.upper())
-            self.table.setItem(r_idx, 3, state_item)
+            self.table.setItem(r_idx, 4, state_item)
 
-            self.table.setItem(r_idx, 4, QTableWidgetItem(f"{c.total_tokens_used:,}"))
-            self.table.setItem(r_idx, 5, QTableWidgetItem(f"{c.success_count} / {c.failure_count}"))
+            self.table.setItem(r_idx, 5, QTableWidgetItem(f"{c.total_tokens_used:,}"))
+            self.table.setItem(r_idx, 6, QTableWidgetItem(f"{c.success_count} / {c.failure_count}"))
 
             # Cooldown
             cd_str = "None"
             if c.cooldown_until and datetime.utcnow() < c.cooldown_until:
                 remain = int((c.cooldown_until - datetime.utcnow()).total_seconds())
                 cd_str = f"{remain}s remaining"
-            self.table.setItem(r_idx, 6, QTableWidgetItem(cd_str))
+            self.table.setItem(r_idx, 7, QTableWidgetItem(cd_str))
 
             del_btn = QPushButton("Remove")
             del_btn.setProperty("class", "DangerBtn")
             del_btn.clicked.connect(lambda _, cred_id=c.id: self._on_delete_cred(cred_id))
-            self.table.setCellWidget(r_idx, 7, del_btn)
+            self.table.setCellWidget(r_idx, 8, del_btn)
 
     def _on_add_key(self):
         dlg = CredentialDialog(self)

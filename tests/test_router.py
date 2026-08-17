@@ -9,6 +9,7 @@ from bookbridge.models.style import STYLE_PRESETS
 from bookbridge.providers.groq import GroqProvider
 from bookbridge.providers.mock import MockProvider
 from bookbridge.providers.orcarouter import OrCarRouterProvider
+from bookbridge.providers.tokenrouter import TokenRouterProvider
 from bookbridge.routing.router import TranslationRouter
 from bookbridge.security.keyring_manager import keyring_manager
 
@@ -95,3 +96,85 @@ def test_orcarouter_provider_registration_and_supported_models():
     assert "qwen/qwen3.8-27b-free" in provider.get_supported_models()
     assert provider.resolve_model_name("qwen/qwen3.8-27b-free") == "qwen/qwen3.8-27b-free"
     assert provider.resolve_model_name("") == "qwen/qwen3.8-27b-free"
+
+
+def test_tokenrouter_provider_registration_and_supported_models():
+    provider = TokenRouterProvider()
+    assert ProviderType.TOKENROUTER.value == "tokenrouter"
+    assert "deepseek/deepseek-v4-pro-0813-free" in provider.get_supported_models()
+    assert "qwen/qwen3.8-max-free" in provider.get_supported_models()
+    assert provider.resolve_model_name("tokenrouter/deepseek/deepseek-v4-pro-0813-free") == "deepseek/deepseek-v4-pro-0813-free"
+    assert provider.resolve_model_name("qwen/qwen3.8-max-free") == "qwen/qwen3.8-max-free"
+    assert provider.resolve_model_name("") == "deepseek/deepseek-v4-pro-0813-free"
+    assert provider.BASE_URL == "https://api.tokenrouter.com/v1/chat/completions"
+
+
+def test_gemini_and_groq_strict_default_limits():
+    gemini_cred = ProviderCredentialMetadata(
+        id="gem_test",
+        provider=ProviderType.GEMINI,
+        name="Gemini Key",
+    )
+    assert gemini_cred.effective_rpm == 15
+    assert gemini_cred.effective_tpm == 240000
+    assert gemini_cred.effective_rpd == 500
+
+    groq_cred = ProviderCredentialMetadata(
+        id="groq_test",
+        provider=ProviderType.GROQ,
+        name="Groq Key",
+    )
+    assert groq_cred.effective_rpm == 30
+    assert groq_cred.effective_tpm == 8000
+    assert groq_cred.effective_rpd == 8000
+
+
+def test_rate_limiter_rpm_and_tpm_capacity():
+    from bookbridge.routing.limiter import RateLimiter
+    limiter = RateLimiter()
+
+    groq_cred = ProviderCredentialMetadata(
+        id="groq_limit_test",
+        provider=ProviderType.GROQ,
+        name="Groq Strict Test",
+    )
+    # 1. Capacity check when empty
+    can_go, wait_s, _ = limiter.check_capacity(groq_cred, estimated_tokens=1000)
+    assert can_go is True
+    assert wait_s == 0.0
+
+    # 2. Record 8,000 tokens (saturating Groq TPM)
+    limiter.record_usage(groq_cred, actual_tokens=8000)
+
+    # 3. Next request should be blocked on TPM
+    can_go, wait_s, reason = limiter.check_capacity(groq_cred, estimated_tokens=500)
+    assert can_go is False
+    assert wait_s > 0.0
+    assert "TPM limit" in reason
+
+
+def test_rate_limiter_rpd_daily_limit():
+    from bookbridge.routing.limiter import RateLimiter
+    from bookbridge.models.provider import UsageRecord
+
+    cred_repo = CredentialRepository()
+    limiter = RateLimiter(cred_repo)
+
+    gemini_cred = ProviderCredentialMetadata(
+        id="gem_rpd_test",
+        provider=ProviderType.GEMINI,
+        name="Gemini RPD Test",
+        rate_limit_rpd=2,  # set small RPD for testing
+    )
+    cred_repo.save_credential_metadata(gemini_cred)
+
+    # Record 2 usage records today
+    cred_repo.record_usage(UsageRecord(credential_id="gem_rpd_test", provider=ProviderType.GEMINI, model="gemini-2.5-flash"))
+    cred_repo.record_usage(UsageRecord(credential_id="gem_rpd_test", provider=ProviderType.GEMINI, model="gemini-2.5-flash"))
+
+    # Should report daily limit reached
+    can_go, wait_s, reason = limiter.check_capacity(gemini_cred)
+    assert can_go is False
+    assert "Daily limit (RPD)" in reason
+
+

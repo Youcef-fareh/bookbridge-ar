@@ -19,6 +19,7 @@ class AppSettings(BaseModel):
     default_gemini_model: str = "gemini-2.5-flash"
     default_groq_model: str = "llama-3.3-70b-versatile"
     default_orcarouter_model: str = "qwen/qwen3.8-27b-free"
+    default_tokenrouter_model: str = "deepseek/deepseek-v4-pro-0813-free"
     max_segment_chars: int = 1200
     context_window_blocks: int = 2
     max_concurrent_requests: int = 3

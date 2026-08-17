@@ -6,7 +6,7 @@ from bookbridge.database.schema import SCHEMA_V1
 
 logger = logging.getLogger(__name__)
 
-CURRENT_VERSION = 1
+CURRENT_VERSION = 2
 
 
 def run_migrations() -> None:
@@ -25,3 +25,12 @@ def run_migrations() -> None:
             conn.executescript(SCHEMA_V1)
             conn.execute("INSERT INTO schema_migrations (version) VALUES (1);")
             logger.info("Database Migration V1 applied successfully.")
+
+        if latest_version < 2:
+            logger.info("Applying Database Migration V2...")
+            try:
+                conn.execute("ALTER TABLE credentials_metadata ADD COLUMN rate_limit_rpd INTEGER;")
+            except Exception:
+                pass  # Column may already exist if created by V1 script
+            conn.execute("INSERT INTO schema_migrations (version) VALUES (2);")
+            logger.info("Database Migration V2 applied successfully.")

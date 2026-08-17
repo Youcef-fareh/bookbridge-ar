@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 import uuid
 from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field
-from bookbridge.config.constants import CredentialState, ProviderType
+from bookbridge.config.constants import CredentialState, ProviderType, PROVIDER_DEFAULT_LIMITS
 
 
 class ProviderCredentialMetadata(BaseModel):
@@ -25,7 +25,26 @@ class ProviderCredentialMetadata(BaseModel):
     last_error_message: Optional[str] = None
     rate_limit_rpm: Optional[int] = None
     rate_limit_tpm: Optional[int] = None
+    rate_limit_rpd: Optional[int] = None
     extra_config: Dict[str, Any] = Field(default_factory=dict)
+
+    @property
+    def effective_rpm(self) -> int:
+        if self.rate_limit_rpm is not None and self.rate_limit_rpm > 0:
+            return self.rate_limit_rpm
+        return PROVIDER_DEFAULT_LIMITS.get(self.provider, {}).get("rpm", 15)
+
+    @property
+    def effective_tpm(self) -> int:
+        if self.rate_limit_tpm is not None and self.rate_limit_tpm > 0:
+            return self.rate_limit_tpm
+        return PROVIDER_DEFAULT_LIMITS.get(self.provider, {}).get("tpm", 20000)
+
+    @property
+    def effective_rpd(self) -> int:
+        if self.rate_limit_rpd is not None and self.rate_limit_rpd > 0:
+            return self.rate_limit_rpd
+        return PROVIDER_DEFAULT_LIMITS.get(self.provider, {}).get("rpd", 500)
 
     @property
     def is_available(self) -> bool:

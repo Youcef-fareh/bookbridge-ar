@@ -33,8 +33,8 @@ class CredentialRepository:
                     id, provider, name, model, enabled, state, cooldown_until,
                     consecutive_failures, failure_count, success_count, total_tokens_used,
                     last_used_at, last_success_at, last_error_at, last_error_message,
-                    rate_limit_rpm, rate_limit_tpm, extra_config_json
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    rate_limit_rpm, rate_limit_tpm, rate_limit_rpd, extra_config_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(id) DO UPDATE SET
                     provider=excluded.provider,
                     name=excluded.name,
@@ -52,6 +52,7 @@ class CredentialRepository:
                     last_error_message=excluded.last_error_message,
                     rate_limit_rpm=excluded.rate_limit_rpm,
                     rate_limit_tpm=excluded.rate_limit_tpm,
+                    rate_limit_rpd=excluded.rate_limit_rpd,
                     extra_config_json=excluded.extra_config_json;
                 """,
                 (
@@ -72,6 +73,7 @@ class CredentialRepository:
                     cred.last_error_message,
                     cred.rate_limit_rpm,
                     cred.rate_limit_tpm,
+                    cred.rate_limit_rpd,
                     extra_json,
                 ),
             )
@@ -84,6 +86,8 @@ class CredentialRepository:
         if not row:
             return None
         extra = json.loads(row["extra_config_json"]) if row["extra_config_json"] else {}
+        keys = row.keys() if hasattr(row, "keys") else []
+        rpd_val = row["rate_limit_rpd"] if "rate_limit_rpd" in keys else None
         return ProviderCredentialMetadata(
             id=row["id"],
             provider=ProviderType(row["provider"]),
@@ -102,6 +106,7 @@ class CredentialRepository:
             last_error_message=row["last_error_message"],
             rate_limit_rpm=row["rate_limit_rpm"],
             rate_limit_tpm=row["rate_limit_tpm"],
+            rate_limit_rpd=rpd_val,
             extra_config=extra,
         )
 
@@ -123,6 +128,8 @@ class CredentialRepository:
         credentials = []
         for row in c.fetchall():
             extra = json.loads(row["extra_config_json"]) if row["extra_config_json"] else {}
+            keys = row.keys() if hasattr(row, "keys") else []
+            rpd_val = row["rate_limit_rpd"] if "rate_limit_rpd" in keys else None
             credentials.append(
                 ProviderCredentialMetadata(
                     id=row["id"],
@@ -142,10 +149,26 @@ class CredentialRepository:
                     last_error_message=row["last_error_message"],
                     rate_limit_rpm=row["rate_limit_rpm"],
                     rate_limit_tpm=row["rate_limit_tpm"],
+                    rate_limit_rpd=rpd_val,
                     extra_config=extra,
                 )
             )
         return credentials
+
+    def get_credential_24h_request_count(self, cred_id: str) -> int:
+        conn = db.get_connection()
+        c = conn.cursor()
+        c.execute(
+            """
+            SELECT count(*) as count
+            FROM usage_records
+            WHERE credential_id = ?
+              AND timestamp >= datetime('now', '-24 hours');
+            """,
+            (cred_id,),
+        )
+        row = c.fetchone()
+        return row["count"] if row and row["count"] else 0
 
     def delete_credential(self, cred_id: str) -> None:
         with db.session() as conn:

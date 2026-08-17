@@ -194,6 +194,7 @@ CREATE TABLE IF NOT EXISTS credentials_metadata (
     last_error_message TEXT,
     rate_limit_rpm INTEGER,
     rate_limit_tpm INTEGER,
+    rate_limit_rpd INTEGER,
     extra_config_json TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

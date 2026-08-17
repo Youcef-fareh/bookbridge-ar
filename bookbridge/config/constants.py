@@ -48,6 +48,7 @@ class ProviderType(str, Enum):
     GEMINI = "gemini"
     GROQ = "groq"
     ORCAROUTER = "orcarouter"
+    TOKENROUTER = "tokenrouter"
     OPENAI = "openai"
     ANTHROPIC = "anthropic"
     OLLAMA = "ollama"
@@ -92,6 +93,51 @@ TOKEN_PATTERN = r"<NB_TERM_(\d+)>"
 DEFAULT_GEMINI_MODEL = "gemini-2.5-flash"
 DEFAULT_GROQ_MODEL = "llama-3.3-70b-versatile"
 DEFAULT_ORCAROUTER_MODEL = "qwen/qwen3.8-27b-free"
+DEFAULT_TOKENROUTER_MODEL = "deepseek/deepseek-v4-pro-0813-free"
+
+# Provider Strict Rate Limit Defaults (RPM, TPM, RPD)
+PROVIDER_DEFAULT_LIMITS = {
+    ProviderType.GEMINI: {
+        "rpm": 15,
+        "tpm": 240000,
+        "rpd": 500,
+    },
+    ProviderType.GROQ: {
+        "rpm": 30,
+        "tpm": 8000,
+        "rpd": 8000,
+    },
+    ProviderType.TOKENROUTER: {
+        "rpm": 20,
+        "tpm": 60000,
+        "rpd": 1000,
+    },
+    ProviderType.ORCAROUTER: {
+        "rpm": 20,
+        "tpm": 60000,
+        "rpd": 1000,
+    },
+    ProviderType.OPENAI: {
+        "rpm": 60,
+        "tpm": 150000,
+        "rpd": 5000,
+    },
+    ProviderType.ANTHROPIC: {
+        "rpm": 50,
+        "tpm": 100000,
+        "rpd": 5000,
+    },
+    ProviderType.OLLAMA: {
+        "rpm": 120,
+        "tpm": 500000,
+        "rpd": 100000,
+    },
+    ProviderType.MOCK: {
+        "rpm": 1000,
+        "tpm": 10000000,
+        "rpd": 1000000,
+    },
+}
 
 # Rate limit & Backoff Defaults
 DEFAULT_COOLDOWN_SECONDS = 60
