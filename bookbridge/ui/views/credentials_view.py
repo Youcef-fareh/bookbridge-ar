@@ -1,7 +1,7 @@
 """API Credentials and Quota Management View."""
 
 import asyncio
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
@@ -222,8 +222,8 @@ class CredentialsView(QWidget):
 
             # Cooldown
             cd_str = "None"
-            if c.cooldown_until and datetime.utcnow() < c.cooldown_until:
-                remain = int((c.cooldown_until - datetime.utcnow()).total_seconds())
+            if c.cooldown_until and datetime.now(timezone.utc) < c.cooldown_until:
+                remain = int((c.cooldown_until - datetime.now(timezone.utc)).total_seconds())
                 cd_str = f"{remain}s remaining"
             self.table.setItem(r_idx, 7, QTableWidgetItem(cd_str))
 
