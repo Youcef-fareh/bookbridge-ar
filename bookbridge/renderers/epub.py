@@ -7,6 +7,7 @@ preserved images, chapters, and metadata.
 import html
 import logging
 from pathlib import Path
+import re
 import ebooklib
 from ebooklib import epub
 from bookbridge.config.constants import BlockType
@@ -14,6 +15,13 @@ from bookbridge.models.book import Book
 from bookbridge.renderers.base import DocumentRenderer
 
 logger = logging.getLogger(__name__)
+
+_INVALID_XML_CHARS = re.compile(r"[\x00-\x08\x0B\x0C\x0E-\x1F\uFFFE\uFFFF]")
+
+
+def _xml_safe_text(value: str) -> str:
+    """Remove characters forbidden by XML 1.0 before EPUB serialization."""
+    return _INVALID_XML_CHARS.sub("", value or "")
 
 ARABIC_EPUB_CSS = """
 @charset "utf-8";
@@ -89,15 +97,15 @@ class EpubRenderer(DocumentRenderer):
         epub_book = epub.EpubBook()
 
         # Metadata
-        epub_book.set_identifier(book.metadata.identifier or f"bookbridge-{book.id}")
-        epub_book.set_title(book.metadata.title)
+        epub_book.set_identifier(_xml_safe_text(book.metadata.identifier or f"bookbridge-{book.id}"))
+        epub_book.set_title(_xml_safe_text(book.metadata.title))
         epub_book.set_language("ar")
-        epub_book.add_author(book.metadata.author)
+        epub_book.add_author(_xml_safe_text(book.metadata.author))
 
         if book.metadata.description:
-            epub_book.add_metadata("DC", "description", book.metadata.description)
+            epub_book.add_metadata("DC", "description", _xml_safe_text(book.metadata.description))
         if book.metadata.publisher:
-            epub_book.add_metadata("DC", "publisher", book.metadata.publisher)
+            epub_book.add_metadata("DC", "publisher", _xml_safe_text(book.metadata.publisher))
 
         # Add CSS
         css_item = epub.EpubItem(
@@ -127,7 +135,7 @@ class EpubRenderer(DocumentRenderer):
 
         for ch_idx, ch in enumerate(book.chapters):
             ch_item = epub.EpubHtml(
-                title=ch.title,
+                title=_xml_safe_text(ch.title),
                 file_name=f"chapter_{ch_idx + 1:04d}.xhtml",
                 lang="ar",
             )
@@ -140,7 +148,7 @@ class EpubRenderer(DocumentRenderer):
                 '<!DOCTYPE html>',
                 '<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" dir="rtl" xml:lang="ar" lang="ar">',
                 '<head>',
-                f'<title>{html.escape(ch.title)}</title>',
+                f'<title>{html.escape(_xml_safe_text(ch.title))}</title>',
                 '<link rel="stylesheet" type="text/css" href="style/arabic.css" />',
                 '</head>',
                 '<body dir="rtl">',
@@ -148,7 +156,7 @@ class EpubRenderer(DocumentRenderer):
 
             for block in ch.blocks:
                 text_to_render = block.translated_text if block.translated_text else block.source_text
-                escaped_text = html.escape(text_to_render)
+                escaped_text = html.escape(_xml_safe_text(text_to_render))
 
                 if block.type == BlockType.HEADING:
                     html_parts.append(f"<h2>{escaped_text}</h2>")

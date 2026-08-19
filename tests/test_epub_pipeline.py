@@ -6,6 +6,7 @@ from PIL import Image
 import ebooklib
 from ebooklib import epub
 from bookbridge.documents.epub.parser import EpubParser
+from bookbridge.models.book import Book, BookMetadata, Chapter, Block
 from bookbridge.renderers.epub import EpubRenderer
 
 
@@ -104,3 +105,25 @@ def test_epub_roundtrip_pipeline(tmp_path: Path):
     ]
     assert len(exported_images) == 1
     assert len(exported_images[0].get_content()) > 0
+
+
+def test_epub_renderer_removes_xml_forbidden_control_characters(tmp_path: Path):
+    book = Book(
+        metadata=BookMetadata(
+            title="Title\x00 with control",
+            author="Author\x0b",
+            description="Description\x1f",
+        ),
+        source_format="pdf",
+    )
+    chapter = Chapter(book_id=book.id, title="Chapter\x00")
+    chapter.blocks.append(
+        Block(chapter_id=chapter.id, source_text="Text\x00 with\x0b controls")
+    )
+    book.chapters.append(chapter)
+
+    output_path = tmp_path / "control_chars.epub"
+    EpubRenderer().render(book, output_path)
+
+    exported_epub = epub.read_epub(str(output_path))
+    assert exported_epub.get_metadata("DC", "title")[0][0] == "Title with control"

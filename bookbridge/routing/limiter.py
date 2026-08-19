@@ -28,13 +28,15 @@ class RateLimiter:
         # Per-credential sliding window for last 60 seconds: deque of (timestamp_seconds, tokens_count)
         self._sliding_windows: Dict[str, Deque[Tuple[float, int]]] = {}
         self._last_request_time: Dict[str, float] = {}
-        self._locks: Dict[str, asyncio.Lock] = {}
+        self._locks: Dict[Tuple[asyncio.AbstractEventLoop, str], asyncio.Lock] = {}
         self._daily_counts: Dict[str, Tuple[float, int]] = {}  # cred_id -> (cache_timestamp, count)
 
     def _get_lock(self, cred_id: str) -> asyncio.Lock:
-        if cred_id not in self._locks:
-            self._locks[cred_id] = asyncio.Lock()
-        return self._locks[cred_id]
+        loop = asyncio.get_running_loop()
+        key = (loop, cred_id)
+        if key not in self._locks:
+            self._locks[key] = asyncio.Lock()
+        return self._locks[key]
 
     def _clean_sliding_window(self, cred_id: str, now: float) -> Deque[Tuple[float, int]]:
         if cred_id not in self._sliding_windows:

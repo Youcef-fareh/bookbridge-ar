@@ -49,4 +49,25 @@ def test_pdf_parsing_and_rendering(tmp_path: Path):
     # Verify readable with PyMuPDF
     res_doc = fitz.open(str(output_pdf_path))
     assert len(res_doc) >= 1
+    pixmap = res_doc[0].get_pixmap()
+    assert sum(pixmap.samples) < len(pixmap.samples) * 255
     res_doc.close()
+
+
+def test_pdf_parser_skips_overlapping_duplicate_text_blocks(tmp_path: Path):
+    source_path = tmp_path / "duplicate_layers.pdf"
+    doc = fitz.open()
+    page = doc.new_page()
+    for _ in range(3):
+        page.insert_text(fitz.Point(50, 80), "The same paragraph", fontsize=12)
+    page.insert_text(fitz.Point(50, 120), "The same paragraph", fontsize=12)
+    doc.save(str(source_path))
+    doc.close()
+
+    book = PdfParser().parse(source_path)
+
+    assert len(book.chapters) == 1
+    assert [block.source_text for block in book.chapters[0].blocks] == [
+        "The same paragraph",
+        "The same paragraph",
+    ]

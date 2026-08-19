@@ -1,13 +1,33 @@
 """Arabic RTL PDF Renderer and Exporter."""
 
 import logging
+import os
 from pathlib import Path
 import fitz  # PyMuPDF
+import arabic_reshaper
+from bidi.algorithm import get_display
 from bookbridge.config.constants import BlockType
 from bookbridge.models.book import Book
 from bookbridge.renderers.base import DocumentRenderer
 
 logger = logging.getLogger(__name__)
+
+
+def _find_arabic_font() -> str:
+    candidates = [
+        Path(os.environ.get("WINDIR", "C:/Windows")) / "Fonts" / "tahoma.ttf",
+        Path(os.environ.get("WINDIR", "C:/Windows")) / "Fonts" / "arial.ttf",
+        Path("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"),
+        Path("/usr/share/fonts/truetype/noto/NotoNaskhArabic-Regular.ttf"),
+    ]
+    for candidate in candidates:
+        if candidate.is_file():
+            return str(candidate)
+    raise RuntimeError("No Arabic-capable font was found. Install Tahoma or Arial.")
+
+
+def _shape_rtl_text(text: str) -> str:
+    return get_display(arabic_reshaper.reshape(text))
 
 
 class PdfRenderer(DocumentRenderer):
@@ -16,6 +36,7 @@ class PdfRenderer(DocumentRenderer):
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
         doc = fitz.open()
+        font_file = _find_arabic_font()
 
         # A4 page size
         PAGE_WIDTH = 595
@@ -31,13 +52,14 @@ class PdfRenderer(DocumentRenderer):
             y = MARGIN_TOP
 
             # Insert chapter title
-            title_text = ch.title
+            title_text = _shape_rtl_text(ch.title)
             rect_title = fitz.Rect(MARGIN_X, y, PAGE_WIDTH - MARGIN_X, y + 25)
             page.insert_textbox(
                 rect_title,
                 title_text,
                 fontsize=16,
-                fontname="helv",
+                fontname="arabic",
+                fontfile=font_file,
                 align=fitz.TEXT_ALIGN_RIGHT,
             )
             y += 35
@@ -62,6 +84,7 @@ class PdfRenderer(DocumentRenderer):
                 text = blk.translated_text if blk.translated_text else blk.source_text
                 if not text:
                     continue
+                text = _shape_rtl_text(text)
 
                 is_heading = blk.type == BlockType.HEADING
                 fsize = 14 if is_heading else 11
@@ -72,7 +95,8 @@ class PdfRenderer(DocumentRenderer):
                     rect,
                     text,
                     fontsize=fsize,
-                    fontname="helv",
+                    fontname="arabic",
+                    fontfile=font_file,
                     align=fitz.TEXT_ALIGN_RIGHT,
                 )
                 # Approximate line height increment

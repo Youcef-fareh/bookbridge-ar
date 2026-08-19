@@ -65,6 +65,7 @@ class PdfParser(DocumentParser):
                 # Extract text blocks
                 try:
                     text_blocks = page.get_text("blocks")
+                    seen_blocks = set()
                     for b in text_blocks:
                         # b format: (x0, y0, x1, y1, "lines", block_no, block_type)
                         # block_type == 0 is text, 1 is image
@@ -72,6 +73,25 @@ class PdfParser(DocumentParser):
                             text = b[4].strip()
                             if not text:
                                 continue
+                            text_lines = [line.strip() for line in text.splitlines() if line.strip()]
+                            normalized_lines = {" ".join(line.split()) for line in text_lines}
+                            if len(normalized_lines) == 1 and text_lines:
+                                text = text_lines[0]
+                            block_key = (
+                                " ".join(text.split()),
+                                round(b[0], 1),
+                                round(b[1], 1),
+                                round(b[2], 1),
+                                round(b[3], 1),
+                            )
+                            if block_key in seen_blocks:
+                                logger.debug(
+                                    "Skipping duplicate PDF text block on page %s: %s",
+                                    page_num + 1,
+                                    text[:80],
+                                )
+                                continue
+                            seen_blocks.add(block_key)
                             # Detect if heading (short text or large font)
                             is_heading = len(text.splitlines()) == 1 and len(text) < 60
                             blk_type = BlockType.HEADING if is_heading else BlockType.PARAGRAPH
