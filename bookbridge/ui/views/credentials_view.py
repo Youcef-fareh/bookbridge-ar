@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from typing import Optional
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
+    QAbstractItemView,
     QCheckBox,
     QComboBox,
     QDialog,
@@ -186,15 +187,24 @@ class CredentialsView(QWidget):
         self.table.setHorizontalHeaderLabels([
             "Provider", "Name", "Model", "Strict Limits", "State / Health", "Tokens Used", "Success / Failures", "Cooldown", "Action"
         ])
-        self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
+        self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Fixed)
+        self.table.setColumnWidth(0, 115)
         self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
-        self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeToContents)
-        self.table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeToContents)
-        self.table.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeToContents)
-        self.table.horizontalHeader().setSectionResizeMode(5, QHeaderView.ResizeToContents)
-        self.table.horizontalHeader().setSectionResizeMode(6, QHeaderView.ResizeToContents)
-        self.table.horizontalHeader().setSectionResizeMode(7, QHeaderView.ResizeToContents)
-        self.table.horizontalHeader().setSectionResizeMode(8, QHeaderView.ResizeToContents)
+        fixed_widths = {
+            2: 170,
+            3: 130,
+            4: 125,
+            5: 100,
+            6: 135,
+            7: 130,
+            8: 100,
+        }
+        for column, width in fixed_widths.items():
+            self.table.horizontalHeader().setSectionResizeMode(column, QHeaderView.Fixed)
+            self.table.setColumnWidth(column, width)
+        self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.table.setSelectionMode(QAbstractItemView.SingleSelection)
         self.table.verticalHeader().setVisible(False)
         table_layout.addWidget(self.table)
 
@@ -205,7 +215,9 @@ class CredentialsView(QWidget):
         self.table.setRowCount(len(creds))
 
         for r_idx, c in enumerate(creds):
-            self.table.setItem(r_idx, 0, QTableWidgetItem(c.provider.value.upper()))
+            provider_item = QTableWidgetItem(c.provider.value.upper())
+            provider_item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+            self.table.setItem(r_idx, 0, provider_item)
             self.table.setItem(r_idx, 1, QTableWidgetItem(c.name))
             self.table.setItem(r_idx, 2, QTableWidgetItem(c.model))
 
@@ -215,6 +227,7 @@ class CredentialsView(QWidget):
 
             # State badge item
             state_item = QTableWidgetItem(c.state.value.upper())
+            state_item.setTextAlignment(Qt.AlignCenter)
             self.table.setItem(r_idx, 4, state_item)
 
             self.table.setItem(r_idx, 5, QTableWidgetItem(f"{c.total_tokens_used:,}"))
@@ -227,8 +240,9 @@ class CredentialsView(QWidget):
                 cd_str = f"{remain}s remaining"
             self.table.setItem(r_idx, 7, QTableWidgetItem(cd_str))
 
-            del_btn = QPushButton("Remove")
+            del_btn = QPushButton("Delete")
             del_btn.setProperty("class", "DangerBtn")
+            del_btn.setMinimumWidth(84)
             del_btn.clicked.connect(lambda _, cred_id=c.id: self._on_delete_cred(cred_id))
             self.table.setCellWidget(r_idx, 8, del_btn)
 

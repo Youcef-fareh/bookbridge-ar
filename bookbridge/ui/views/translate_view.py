@@ -56,6 +56,10 @@ class PreviewDialog(QDialog):
         src_layout = QVBoxLayout(src_box)
         src_layout.addWidget(QLabel("Source English:"))
         src_edit = QTextEdit()
+        src_edit.setStyleSheet(
+            "background-color: #1a1e2b; color: #f1f5f9; "
+            "selection-background-color: #6366f1;"
+        )
         src_edit.setPlainText(sample_text)
         src_edit.setReadOnly(True)
         src_layout.addWidget(src_edit)
@@ -66,6 +70,10 @@ class PreviewDialog(QDialog):
         trans_layout = QVBoxLayout(trans_box)
         trans_layout.addWidget(QLabel("Translated Arabic (RTL):"))
         trans_edit = QTextEdit()
+        trans_edit.setStyleSheet(
+            "background-color: #1a1e2b; color: #f1f5f9; "
+            "selection-background-color: #6366f1;"
+        )
         trans_edit.setLayoutDirection(Qt.RightToLeft)
         trans_edit.setPlainText(translated_text)
         trans_edit.setReadOnly(True)
@@ -226,6 +234,10 @@ class TranslateView(QWidget):
         src_stream_layout = QVBoxLayout(src_stream_frame)
         src_stream_layout.addWidget(QLabel("Live Source Segment (English):"))
         self.src_stream_edit = QPlainTextEdit()
+        self.src_stream_edit.setStyleSheet(
+            "background-color: #1a1e2b; color: #f1f5f9; "
+            "selection-background-color: #6366f1;"
+        )
         self.src_stream_edit.setReadOnly(True)
         src_stream_layout.addWidget(self.src_stream_edit)
         stream_splitter.addWidget(src_stream_frame)
@@ -235,6 +247,10 @@ class TranslateView(QWidget):
         ar_stream_layout = QVBoxLayout(ar_stream_frame)
         ar_stream_layout.addWidget(QLabel("Live Translated Output (Arabic RTL):"))
         self.ar_stream_edit = QPlainTextEdit()
+        self.ar_stream_edit.setStyleSheet(
+            "background-color: #1a1e2b; color: #f1f5f9; "
+            "selection-background-color: #6366f1;"
+        )
         self.ar_stream_edit.setLayoutDirection(Qt.RightToLeft)
         self.ar_stream_edit.setReadOnly(True)
         ar_stream_layout.addWidget(self.ar_stream_edit)

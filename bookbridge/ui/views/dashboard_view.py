@@ -2,6 +2,7 @@
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
+    QAbstractItemView,
     QFrame,
     QGridLayout,
     QHBoxLayout,
@@ -124,6 +125,9 @@ class DashboardView(QWidget):
         self.jobs_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeToContents)
         self.jobs_table.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeToContents)
         self.jobs_table.horizontalHeader().setSectionResizeMode(5, QHeaderView.ResizeToContents)
+        self.jobs_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.jobs_table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.jobs_table.setSelectionMode(QAbstractItemView.SingleSelection)
         self.jobs_table.verticalHeader().setVisible(False)
         table_layout.addWidget(self.jobs_table)
 
