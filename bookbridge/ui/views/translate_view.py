@@ -4,9 +4,12 @@ import asyncio
 from pathlib import Path
 from typing import Optional
 from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import QDateTime, QTimer, Qt, Signal
 from PySide6.QtWidgets import (
     QComboBox,
+    QCheckBox,
     QDialog,
+    QDateTimeEdit,
     QFileDialog,
     QFrame,
     QGridLayout,
@@ -108,6 +111,8 @@ class TranslateView(QWidget):
         self.current_book: Optional[Book] = None
         self.current_job: Optional[TranslationJob] = None
         self.worker: Optional[AsyncWorker] = None
+        self._schedule_timer: Optional[QTimer] = None
+        self._scheduled_auto_export = False
 
         self._setup_ui()
         self.job_runner.set_progress_callback(self._on_job_progress)
@@ -190,11 +195,33 @@ class TranslateView(QWidget):
         self.pause_btn.clicked.connect(self._on_pause)
         btn_bar.addWidget(self.pause_btn)
 
+        self.cancel_btn = QPushButton("Cancel")
+        self.cancel_btn.setProperty("class", "DangerBtn")
+        self.cancel_btn.setEnabled(False)
+        self.cancel_btn.clicked.connect(self._on_cancel)
+        btn_bar.addWidget(self.cancel_btn)
+
         self.export_btn = QPushButton("Export Output Book")
         self.export_btn.setProperty("class", "SuccessBtn")
         self.export_btn.setEnabled(False)
         self.export_btn.clicked.connect(self._on_export_book)
         btn_bar.addWidget(self.export_btn)
+
+        scheduler_layout = QHBoxLayout()
+        self.schedule_check = QCheckBox("Schedule translation")
+        self.schedule_check.toggled.connect(self._on_schedule_mode_toggled)
+        scheduler_layout.addWidget(self.schedule_check)
+        self.schedule_time = QDateTimeEdit(QDateTime.currentDateTime().addSecs(300))
+        self.schedule_time.setCalendarPopup(True)
+        self.schedule_time.setDisplayFormat("yyyy-MM-dd HH:mm")
+        self.schedule_time.setEnabled(False)
+        scheduler_layout.addWidget(self.schedule_time)
+        self.auto_export_check = QCheckBox("Auto-export to configured output folder")
+        self.auto_export_check.setChecked(True)
+        self.auto_export_check.setEnabled(False)
+        scheduler_layout.addWidget(self.auto_export_check)
+        scheduler_layout.addStretch()
+        config_layout.addLayout(scheduler_layout, 4, 0, 1, 4)
 
         config_layout.addLayout(btn_bar, 3, 0, 1, 4)
         layout.addWidget(config_card)
@@ -302,7 +329,12 @@ class TranslateView(QWidget):
             if self.current_job.status == JobStatus.COMPLETED:
                 self.export_btn.setEnabled(True)
                 self.start_btn.setText("Retranslate Book")
-            elif self.current_job.status in (JobStatus.PAUSED, JobStatus.RUNNING, JobStatus.FAILED):
+            elif self.current_job.status in (
+                JobStatus.PAUSED,
+                JobStatus.RUNNING,
+                JobStatus.FAILED,
+                JobStatus.NEEDS_REVIEW,
+            ):
                 self.start_btn.setText("Resume Translation")
         else:
             self.current_job = None
@@ -362,11 +394,49 @@ class TranslateView(QWidget):
             loop.close()
 
     def _on_start_or_resume(self):
+        if self.schedule_check.isChecked():
+            self._schedule_translation()
+            return
+        self._start_translation(auto_export=False)
+
+    def _on_schedule_mode_toggled(self, enabled: bool):
+        self.schedule_time.setEnabled(enabled)
+        self.auto_export_check.setEnabled(enabled)
+
+    def _schedule_translation(self):
+        if not self.current_book:
+            QMessageBox.warning(self, "No Book", "Please select a book first.")
+            return
+        delay_ms = QDateTime.currentDateTime().msecsTo(self.schedule_time.dateTime())
+        if delay_ms <= 0:
+            QMessageBox.warning(self, "Invalid Schedule", "Choose a future date and time.")
+            return
+        if self._schedule_timer:
+            self._schedule_timer.stop()
+        self._scheduled_auto_export = self.auto_export_check.isChecked()
+        self._schedule_timer = QTimer(self)
+        self._schedule_timer.setSingleShot(True)
+        self._schedule_timer.timeout.connect(self._start_scheduled_translation)
+        self._schedule_timer.start(delay_ms)
+        self.start_btn.setEnabled(False)
+        self.cancel_btn.setEnabled(True)
+        self.lbl_progress_status.setText(
+            f"Translation scheduled for {self.schedule_time.dateTime().toString('yyyy-MM-dd HH:mm')}."
+        )
+
+    def _start_scheduled_translation(self):
+        self._start_translation(auto_export=self._scheduled_auto_export)
+
+    def _start_translation(self, auto_export: bool):
         if not self.current_book:
             QMessageBox.warning(self, "No Book", "Please select a book first.")
             return
 
-        if not self.current_job or self.current_job.status in (JobStatus.COMPLETED, JobStatus.FAILED):
+        if not self.current_job or self.current_job.status in (
+            JobStatus.COMPLETED,
+            JobStatus.FAILED,
+            JobStatus.CANCELLED,
+        ):
             style_val = self.style_combo.currentData()
             glossary_id = self.glossary_combo.currentData()
             self.current_job = TranslationJob(
@@ -375,11 +445,13 @@ class TranslateView(QWidget):
                 style=TranslationStyleType(style_val),
                 glossary_profile_id=glossary_id if glossary_id else None,
                 output_format=self.format_combo.currentText().lower(),
+                custom_settings={"scheduled": auto_export, "auto_export": auto_export},
             )
             self.job_repo.create_job(self.current_job)
 
         self.start_btn.setEnabled(False)
         self.pause_btn.setEnabled(True)
+        self.cancel_btn.setEnabled(True)
         self.export_btn.setEnabled(False)
         self.lbl_progress_status.setText("Translating chapters...")
 
@@ -396,6 +468,19 @@ class TranslateView(QWidget):
             self.start_btn.setEnabled(True)
             self.start_btn.setText("Resume Translation")
             self.lbl_progress_status.setText("Job Paused.")
+
+    def _on_cancel(self):
+        if self._schedule_timer and self._schedule_timer.isActive():
+            self._schedule_timer.stop()
+            self._schedule_timer = None
+            self.start_btn.setEnabled(True)
+            self.cancel_btn.setEnabled(False)
+            self.lbl_progress_status.setText("Scheduled translation cancelled.")
+            return
+        if self.job_runner and self.worker and self.worker.isRunning():
+            self.job_runner.cancel()
+            self.cancel_btn.setEnabled(False)
+            self.lbl_progress_status.setText("Cancellation requested...")
 
     def _on_job_progress(self, job: TranslationJob, segment: Optional[Segment]):
         if self.worker:
@@ -421,17 +506,53 @@ class TranslateView(QWidget):
     def _on_job_finished(self, success: bool, message: str):
         self.start_btn.setEnabled(True)
         self.pause_btn.setEnabled(False)
+        self.cancel_btn.setEnabled(False)
+        self.export_btn.setEnabled(False)
         if success:
             self.export_btn.setEnabled(True)
             self.lbl_progress_status.setText("Translation Complete! Ready to export.")
             QMessageBox.information(self, "Translation Finished", "Book translation completed successfully!")
+            if self.current_job and self.current_job.custom_settings.get("auto_export"):
+                self._auto_export_book()
         else:
             self.lbl_progress_status.setText(f"Job Stopped: {message}")
             QMessageBox.warning(self, "Job Incomplete", f"Translation ended:\n{message}")
 
+    def _auto_export_book(self):
+        book = self.book_repo.get_book(self.current_book.id)
+        fmt = self.current_job.output_format
+        output_path = settings.exports_dir / f"{book.metadata.title}_Arabic.{fmt}"
+        try:
+            if fmt == "epub":
+                self.epub_renderer.render(book, output_path)
+            else:
+                self.pdf_renderer.render(book, output_path)
+            self.lbl_progress_status.setText(f"Scheduled translation exported to {output_path}")
+        except Exception as ex:
+            QMessageBox.critical(self, "Scheduled Export Error", f"Failed to render document:\n{ex}")
+
     def _on_export_book(self):
         if not self.current_book:
             return
+        if not self.current_job:
+            QMessageBox.warning(self, "Translation Incomplete", "Translate the book before exporting it.")
+            return
+
+        persisted_job = self.job_repo.get_job(self.current_job.id)
+        if (
+            not persisted_job
+            or persisted_job.status != JobStatus.COMPLETED
+            or persisted_job.failed_segments > 0
+            or persisted_job.completed_segments != persisted_job.total_segments
+        ):
+            QMessageBox.warning(
+                self,
+                "Translation Incomplete",
+                "The book cannot be exported because the translation job did not complete successfully.",
+            )
+            self.export_btn.setEnabled(False)
+            return
+
         # Load fresh book data with all translations
         book = self.book_repo.get_book(self.current_book.id)
         fmt = self.format_combo.currentText().lower()

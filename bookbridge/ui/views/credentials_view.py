@@ -2,28 +2,24 @@
 
 import asyncio
 from datetime import datetime, timezone
-from typing import Optional
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QAbstractItemView,
-    QCheckBox,
     QComboBox,
     QDialog,
     QDialogButtonBox,
     QFormLayout,
     QFrame,
     QHBoxLayout,
-    QHeaderView,
     QLabel,
     QLineEdit,
     QMessageBox,
     QPushButton,
-    QTableWidget,
-    QTableWidgetItem,
+    QTreeWidget,
+    QTreeWidgetItem,
     QVBoxLayout,
     QWidget,
 )
-from bookbridge.config.constants import CredentialState, ProviderType
+from bookbridge.config.constants import ProviderType, PROVIDER_DEFAULT_LIMITS
 from bookbridge.database.repositories.credential_repo import CredentialRepository
 from bookbridge.models.provider import ProviderCredentialMetadata
 from bookbridge.providers.gemini import GeminiProvider
@@ -31,6 +27,14 @@ from bookbridge.providers.groq import GroqProvider
 from bookbridge.providers.orcarouter import OrCarRouterProvider
 from bookbridge.providers.tokenrouter import TokenRouterProvider
 from bookbridge.security.keyring_manager import keyring_manager
+
+
+PROVIDER_DETAILS = {
+    ProviderType.GEMINI: ("Google Gemini", GeminiProvider),
+    ProviderType.GROQ: ("Groq", GroqProvider),
+    ProviderType.TOKENROUTER: ("TokenRouter", TokenRouterProvider),
+    ProviderType.ORCAROUTER: ("OrCarRouter", OrCarRouterProvider),
+}
 
 
 class CredentialDialog(QDialog):
@@ -177,74 +181,76 @@ class CredentialsView(QWidget):
         sec_layout.addWidget(sec_lbl)
         layout.addWidget(sec_card)
 
-        # Credentials Table Card
+        # Provider hierarchy monitor
         table_card = QFrame()
         table_card.setProperty("class", "Card")
         table_layout = QVBoxLayout(table_card)
 
-        self.table = QTableWidget()
-        self.table.setColumnCount(9)
-        self.table.setHorizontalHeaderLabels([
-            "Provider", "Name", "Model", "Strict Limits", "State / Health", "Tokens Used", "Success / Failures", "Cooldown", "Action"
-        ])
-        self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Fixed)
-        self.table.setColumnWidth(0, 115)
-        self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
-        fixed_widths = {
-            2: 170,
-            3: 130,
-            4: 125,
-            5: 100,
-            6: 135,
-            7: 130,
-            8: 100,
-        }
-        for column, width in fixed_widths.items():
-            self.table.horizontalHeader().setSectionResizeMode(column, QHeaderView.Fixed)
-            self.table.setColumnWidth(column, width)
-        self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
-        self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
-        self.table.setSelectionMode(QAbstractItemView.SingleSelection)
-        self.table.verticalHeader().setVisible(False)
-        table_layout.addWidget(self.table)
+        self.tree = QTreeWidget()
+        self.tree.setColumnCount(4)
+        self.tree.setHeaderLabels(["Provider / API Key", "Status", "Details", "Action"])
+        self.tree.setColumnWidth(0, 240)
+        self.tree.setColumnWidth(1, 150)
+        self.tree.setColumnWidth(2, 560)
+        self.tree.setColumnWidth(3, 90)
+        self.tree.setAlternatingRowColors(True)
+        table_layout.addWidget(self.tree)
 
         layout.addWidget(table_card)
 
     def refresh_credentials(self):
         creds = self.cred_repo.list_credentials()
-        self.table.setRowCount(len(creds))
+        grouped = {provider: [] for provider in PROVIDER_DETAILS}
+        for cred in creds:
+            grouped.setdefault(cred.provider, []).append(cred)
 
-        for r_idx, c in enumerate(creds):
-            provider_item = QTableWidgetItem(c.provider.value.upper())
-            provider_item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-            self.table.setItem(r_idx, 0, provider_item)
-            self.table.setItem(r_idx, 1, QTableWidgetItem(c.name))
-            self.table.setItem(r_idx, 2, QTableWidgetItem(c.model))
+        self.tree.clear()
+        for provider, (label, provider_class) in PROVIDER_DETAILS.items():
+            limits = PROVIDER_DEFAULT_LIMITS[provider]
+            root = QTreeWidgetItem([
+                label,
+                "",
+                f"{limits['rpm']} RPM | {limits['tpm']:,} TPM | {limits['rpd']:,} RPD",
+                "",
+            ])
+            self.tree.addTopLevelItem(root)
 
-            # Strict limits badge
-            limits_str = f"{c.effective_rpm} RPM | {c.effective_tpm // 1000}k TPM"
-            self.table.setItem(r_idx, 3, QTableWidgetItem(limits_str))
+            key_node = QTreeWidgetItem(["API Key", "", f"{len(grouped[provider])} configured", ""])
+            root.addChild(key_node)
+            for cred in grouped[provider]:
+                status = "AVAILABLE" if cred.is_available else cred.state.value.upper()
+                cooldown = ""
+                if cred.cooldown_until:
+                    remaining = int((cred.cooldown_until - datetime.now(timezone.utc)).total_seconds())
+                    if remaining > 0:
+                        cooldown = f" | Cooldown: {remaining}s"
+                key_item = QTreeWidgetItem([
+                    cred.name,
+                    status,
+                    f"Model: {cred.model} | Tokens: {cred.total_tokens_used:,} | "
+                    f"Success/failures: {cred.success_count}/{cred.failure_count}{cooldown}",
+                    "",
+                ])
+                key_node.addChild(key_item)
+                delete_button = QPushButton("Delete")
+                delete_button.setProperty("class", "DangerBtn")
+                delete_button.clicked.connect(lambda _, cred_id=cred.id: self._on_delete_cred(cred_id))
+                self.tree.setItemWidget(key_item, 3, delete_button)
 
-            # State badge item
-            state_item = QTableWidgetItem(c.state.value.upper())
-            state_item.setTextAlignment(Qt.AlignCenter)
-            self.table.setItem(r_idx, 4, state_item)
+            root.addChild(QTreeWidgetItem([
+                "Base URL", "", getattr(provider_class, "BASE_URL", "Provider-managed endpoint"), ""
+            ]))
+            status_text = "No credentials configured" if not grouped[provider] else ", ".join(
+                f"{cred.name}: {cred.state.value}" for cred in grouped[provider]
+            )
+            root.addChild(QTreeWidgetItem(["Status", "", status_text, ""]))
 
-            self.table.setItem(r_idx, 5, QTableWidgetItem(f"{c.total_tokens_used:,}"))
-            self.table.setItem(r_idx, 6, QTableWidgetItem(f"{c.success_count} / {c.failure_count}"))
+            models_node = QTreeWidgetItem(["Models", "", "Supported models", ""])
+            root.addChild(models_node)
+            for model in provider_class().get_supported_models():
+                models_node.addChild(QTreeWidgetItem([model, "SUPPORTED", "", ""]))
 
-            # Cooldown
-            cd_str = "None"
-            if c.cooldown_until and datetime.now(timezone.utc) < c.cooldown_until:
-                remain = int((c.cooldown_until - datetime.now(timezone.utc)).total_seconds())
-                cd_str = f"{remain}s remaining"
-            self.table.setItem(r_idx, 7, QTableWidgetItem(cd_str))
-
-            del_btn = QPushButton("Delete")
-            del_btn.setProperty("class", "DangerBtn")
-            del_btn.setMinimumWidth(84)
-            del_btn.clicked.connect(lambda _, cred_id=c.id: self._on_delete_cred(cred_id))
-            self.table.setCellWidget(r_idx, 8, del_btn)
+            root.setExpanded(bool(grouped[provider]))
 
     def _on_add_key(self):
         dlg = CredentialDialog(self)

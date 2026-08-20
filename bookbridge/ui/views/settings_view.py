@@ -9,6 +9,7 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QMessageBox,
     QPushButton,
+    QDoubleSpinBox,
     QSpinBox,
     QVBoxLayout,
     QWidget,
@@ -71,6 +72,15 @@ class SettingsView(QWidget):
         self.retries_spin.setValue(settings.max_validation_retries)
         form.addRow(retries_label, self.retries_spin)
 
+        cooldown_label = QLabel("Additional Normal Request Cooldown (seconds):")
+        cooldown_label.setStyleSheet("color: #f1f5f9;")
+        self.cooldown_spin = QDoubleSpinBox()
+        self.cooldown_spin.setRange(0.0, 60.0)
+        self.cooldown_spin.setSingleStep(0.05)
+        self.cooldown_spin.setDecimals(2)
+        self.cooldown_spin.setValue(settings.normal_request_cooldown_seconds)
+        form.addRow(cooldown_label, self.cooldown_spin)
+
         layout.addWidget(card)
 
         # Save button
@@ -87,7 +97,20 @@ class SettingsView(QWidget):
             self.export_dir_edit.setText(dir_path)
 
     def _on_save(self):
+        export_dir = self.export_dir_edit.text().strip()
+        if not export_dir:
+            QMessageBox.warning(self, "Invalid Directory", "Please select an export directory.")
+            return
+
+        settings.export_directory = export_dir
         settings.max_segment_chars = self.max_chars_spin.value()
         settings.context_window_blocks = self.ctx_blocks_spin.value()
         settings.max_validation_retries = self.retries_spin.value()
+        settings.normal_request_cooldown_seconds = self.cooldown_spin.value()
+        try:
+            settings.save()
+            settings.ensure_directories()
+        except OSError as exc:
+            QMessageBox.critical(self, "Settings Error", f"Could not save settings:\n{exc}")
+            return
         QMessageBox.information(self, "Saved", "Settings updated successfully.")

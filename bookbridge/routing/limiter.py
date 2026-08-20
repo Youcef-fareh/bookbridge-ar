@@ -9,6 +9,7 @@ from typing import Deque, Dict, Optional, Tuple
 
 from bookbridge.database.repositories.credential_repo import CredentialRepository
 from bookbridge.models.provider import ProviderCredentialMetadata
+from bookbridge.config.settings import settings
 
 logger = logging.getLogger(__name__)
 
@@ -96,8 +97,8 @@ class RateLimiter:
         wait_time = 0.0
         reasons = []
 
-        # 3. Check Minimum Inter-Request Pacing: spacing = (60.0 / rpm) + 0.05
-        min_pacing = (60.0 / float(rpm)) + 0.05
+        # User delay can slow requests but never bypass provider RPM limits.
+        min_pacing = (60.0 / float(rpm)) + settings.normal_request_cooldown_seconds
         last_req = self._last_request_time.get(cred.id, 0.0)
         time_since_last = now - last_req
         if time_since_last < min_pacing:

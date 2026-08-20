@@ -18,12 +18,14 @@ New-Item -ItemType Directory -Force -Path "$Root\dist\app" | Out-Null
 if (Test-Path "$Root\icon.ico") {
     & pyinstaller --noconfirm --clean --onefile --windowed --name BookBridge `
       --icon "$Root\icon.ico" `
+            --manifest "$Root\installer\BookBridge.manifest" `
       --add-data "README.md;." `
       --add-data "sample_data;sample_data" `
       --distpath "$Root\dist\app" `
       "$Root\bookbridge\app.py"
 } else {
     & pyinstaller --noconfirm --clean --onefile --windowed --name BookBridge `
+            --manifest "$Root\installer\BookBridge.manifest" `
       --add-data "README.md;." `
       --add-data "sample_data;sample_data" `
       --distpath "$Root\dist\app" `

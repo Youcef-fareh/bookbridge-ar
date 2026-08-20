@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 import logging
 from typing import Callable, Optional
 from bookbridge.config.constants import JobStatus, SegmentStatus
+from bookbridge.config.settings import settings
 from bookbridge.database.repositories.book_repo import BookRepository
 from bookbridge.database.repositories.glossary_repo import GlossaryRepository
 from bookbridge.database.repositories.job_repo import JobRepository
@@ -28,7 +29,10 @@ class JobRunner:
         self.book_repo = book_repo or BookRepository()
         self.glossary_repo = glossary_repo or GlossaryRepository()
         self.pipeline = pipeline or TranslationPipeline()
-        self.segmenter = SegmentationEngine()
+        self.segmenter = SegmentationEngine(
+            max_chars=settings.max_segment_chars,
+            context_blocks_count=settings.context_window_blocks,
+        )
 
         self._is_paused = False
         self._is_cancelled = False
@@ -79,6 +83,10 @@ class JobRunner:
         # Load or generate segments
         existing_segments = self.job_repo.get_job_segments(job_id)
         if not existing_segments:
+            self.segmenter = SegmentationEngine(
+                max_chars=settings.max_segment_chars,
+                context_blocks_count=settings.context_window_blocks,
+            )
             logger.info("Generating semantic segments for book...")
             all_segments: list[Segment] = []
             order_counter = 0
@@ -118,6 +126,9 @@ class JobRunner:
                 await asyncio.sleep(1.0)
                 if self._is_cancelled:
                     self.job_repo.update_job_status(job_id, JobStatus.CANCELLED)
+                    job.status = JobStatus.CANCELLED
+                    if self._on_progress_callback:
+                        self._on_progress_callback(job, None)
                     return False
 
             # Skip already completed segments (Resume functionality!)
@@ -187,9 +198,32 @@ class JobRunner:
             if self._on_progress_callback:
                 self._on_progress_callback(job, segment)
 
+            if not result.success:
+                message = (
+                    f"Translation stopped with {job.failed_segments} failed segment(s). "
+                    "Resolve the provider errors and resume the job."
+                )
+                self.job_repo.update_job_status(job_id, JobStatus.NEEDS_REVIEW, message)
+                job.status = JobStatus.NEEDS_REVIEW
+                job.error_message = message
+                if self._on_progress_callback:
+                    self._on_progress_callback(job, None)
+                return False
+
             await asyncio.sleep(0.05)
 
-        # Mark job complete
+        if job.failed_segments:
+            message = (
+                f"Translation stopped with {job.failed_segments} failed segment(s). "
+                "Resolve the provider errors and resume the job."
+            )
+            self.job_repo.update_job_status(job_id, JobStatus.NEEDS_REVIEW, message)
+            job.status = JobStatus.NEEDS_REVIEW
+            job.error_message = message
+            if self._on_progress_callback:
+                self._on_progress_callback(job, None)
+            return False
+
         self.job_repo.update_job_status(job_id, JobStatus.COMPLETED, finished=True)
         job.status = JobStatus.COMPLETED
         if self._on_progress_callback:

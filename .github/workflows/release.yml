@@ -36,12 +36,14 @@ jobs:
           if (Test-Path .\icon.ico) {
             pyinstaller --noconfirm --clean --onefile --windowed --name BookBridge `
               --icon .\icon.ico `
+              --manifest .\installer\BookBridge.manifest `
               --add-data "README.md;." `
               --add-data "sample_data;sample_data" `
               --distpath .\dist\app `
               .\bookbridge\app.py
           } else {
             pyinstaller --noconfirm --clean --onefile --windowed --name BookBridge `
+              --manifest .\installer\BookBridge.manifest `
               --add-data "README.md;." `
               --add-data "sample_data;sample_data" `
               --distpath .\dist\app `

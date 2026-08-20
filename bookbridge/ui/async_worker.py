@@ -24,7 +24,11 @@ class AsyncWorker(QThread):
         asyncio.set_event_loop(self._loop)
         try:
             res = self._loop.run_until_complete(self._coro_func())
-            self.finished_signal.emit(True, "Job completed successfully.")
+            if isinstance(res, bool):
+                message = "Job completed successfully." if res else "Job stopped before completion."
+                self.finished_signal.emit(res, message)
+            else:
+                self.finished_signal.emit(True, "Job completed successfully.")
         except Exception as ex:
             logger.exception("AsyncWorker encountered error")
             self.finished_signal.emit(False, str(ex))
