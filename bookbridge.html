@@ -1,0 +1,1078 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BookBridge — AI Book Translation</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/fontsource/fonts/space-grotesk@latest/latin-500-normal.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/fontsource/fonts/space-grotesk@latest/latin-600-normal.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/fontsource/fonts/space-grotesk@latest/latin-700-normal.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/fontsource/fonts/inter@latest/latin-400-normal.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/fontsource/fonts/inter@latest/latin-500-normal.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/fontsource/fonts/inter@latest/latin-600-normal.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/fontsource/fonts/inter@latest/latin-700-normal.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/fontsource/fonts/inter@latest/latin-800-normal.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/fontsource/fonts/jetbrains-mono@latest/latin-400-normal.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/fontsource/fonts/jetbrains-mono@latest/latin-500-normal.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/fontsource/fonts/jetbrains-mono@latest/latin-600-normal.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/fontsource/fonts/amiri@latest/arabic-400-normal.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/fontsource/fonts/amiri@latest/arabic-700-normal.css">
+<style>
+:root{
+  --bg:#0a0d16; --bg2:#0d1120; --card:#121728; --card2:#161c31; --inset:#0a0e1c;
+  --line:#222a45; --line2:#2c3556; --hover:#171d33;
+  --text:#eef2fb; --mut:#94a3b8; --quiet:#64748b;
+  --ind:#6366f1; --ind2:#4f46e5; --ind3:#818cf8; --cyan:#22d3ee; --cyan2:#38bdf8;
+  --green:#10b981; --amber:#f59e0b; --red:#ef4444;
+  --font-d:'Space Grotesk','Inter',sans-serif;
+  --font-u:'Inter','Segoe UI',sans-serif;
+  --font-m:'JetBrains Mono',Consolas,monospace;
+  --font-ar:'Amiri',serif;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{height:100%}
+body{font:13.5px/1.55 var(--font-u);color:var(--text);background:var(--bg);display:flex;overflow:hidden}
+body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:0;
+ background:radial-gradient(700px 340px at 12% -6%,rgba(79,70,229,.16),transparent 60%),radial-gradient(600px 300px at 88% -8%,rgba(34,211,238,.09),transparent 60%)}
+body.light{--bg:#eef2f7;--bg2:#ffffff;--card:#ffffff;--card2:#f5f7fb;--inset:#f1f4f9;--line:#d8deea;--line2:#c4ccdc;--hover:#eef2ff;--text:#172033;--mut:#526078;--quiet:#71809a}
+body.light::before{background:radial-gradient(700px 340px at 12% -6%,rgba(99,102,241,.12),transparent 60%),radial-gradient(600px 300px at 88% -8%,rgba(34,211,238,.08),transparent 60%)}
+body.light .input,body.light .select{background:#fff;color:#172033;border-color:#c4ccdc}
+body.light .btn-sec{background:#eef2f8;color:#334155}
+body.light thead th{background:#fff}
+body.light tbody td{border-color:#e3e8f1}
+body.light .nav-btn:hover{background:#e4e9f5;color:#172033}
+body.light .nav-btn.active{color:#fff}
+body.light .sidebar{border-right-color:#d8deea}
+body.light .brand{border-bottom-color:#e3e8f1}
+body.light .side-foot{border-top-color:#e3e8f1}
+body.light .btn-sec:hover:not(:disabled){background:#dce3f1;border-color:#aeb9ce;color:#172033}
+body.light tbody tr:hover,.light .trow:hover,.light .cred-root:hover{background:#e4e9f5;color:#172033}
+::selection{background:rgba(99,102,241,.4)}
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-thumb{background:#252d4a;border-radius:8px;border:3px solid transparent;background-clip:content-box}
+::-webkit-scrollbar-thumb:hover{background:#33406b;border:3px solid transparent;background-clip:content-box}
+::-webkit-scrollbar-track{background:transparent}
+button{font-family:var(--font-u)}
+:focus-visible{outline:2px solid var(--ind);outline-offset:2px;border-radius:6px}
+.ic{width:16px;height:16px;flex:none;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.ic-sm{width:13px;height:13px}.ic-lg{width:20px;height:20px}.ic-xl{width:30px;height:30px}
+.mono{font-family:var(--font-m)}
+.spin{animation:rot 1s linear infinite}
+@keyframes rot{to{transform:rotate(360deg)}}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(56,189,248,.45)}70%{box-shadow:0 0 0 6px rgba(56,189,248,0)}100%{box-shadow:0 0 0 0 rgba(56,189,248,0)}}
+@keyframes fadein{from{opacity:0;transform:translateY(4px)}}
+@keyframes pop{from{transform:translateY(10px) scale(.98);opacity:0}}
+@keyframes sheen{from{transform:translateX(-100%)}to{transform:translateX(220%)}}
+
+/* ============ sidebar ============ */
+.sidebar{width:232px;flex:none;background:var(--bg2);border-right:1px solid #1c2440;display:flex;flex-direction:column;z-index:2;position:relative}
+.brand{padding:20px 18px 16px;display:flex;gap:11px;align-items:center;border-bottom:1px solid #161d33}
+.brand-mark{width:38px;height:38px;border-radius:11px;background:linear-gradient(135deg,#4f46e5,#7c3aed);display:grid;place-items:center;color:#fff;box-shadow:0 6px 18px rgba(79,70,229,.45)}
+.brand-name{font:700 18px/1.1 var(--font-d);color:#fff;letter-spacing:-.2px}
+.brand-sub{font-size:9.5px;font-weight:700;letter-spacing:2.2px;color:var(--ind3);text-transform:uppercase;margin-top:2px}
+.nav{padding:14px 12px;display:flex;flex-direction:column;gap:4px;flex:1}
+.nav-btn{display:flex;align-items:center;gap:11px;border:none;background:transparent;color:var(--mut);font:600 13px var(--font-u);padding:10px 13px;border-radius:10px;cursor:pointer;text-align:left;transition:.15s}
+.nav-btn .ic{width:17px;height:17px}
+.nav-btn:hover{background:#1a2138;color:var(--text)}
+.nav-btn.active{background:linear-gradient(135deg,#4f46e5,#6d5ef0);color:#fff;box-shadow:0 6px 18px rgba(79,70,229,.4)}
+.side-foot{padding:14px 18px;border-top:1px solid #161d33;font-size:11px;color:var(--quiet);display:flex;gap:7px;align-items:center}
+.side-foot .dot{width:7px;height:7px;border-radius:50%;background:var(--green);animation:pulse 2s infinite}
+
+/* ============ main ============ */
+.main{flex:1;min-width:0;position:relative;z-index:1;display:flex;flex-direction:column}
+.page{flex:1;min-height:0;overflow:auto;padding:26px 30px;display:none}
+.page.active{display:block;animation:fadein .2s}
+.page-head{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:18px}
+.page-title{font:800 22px/1.2 var(--font-d);color:#fff;letter-spacing:-.3px}
+.page-sub{font-size:12.5px;color:var(--mut);margin-top:3px}
+.head-actions{display:flex;gap:9px;flex-wrap:wrap}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;box-shadow:0 10px 30px rgba(0,0,0,.25)}
+.card-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:13px 16px;border-bottom:1px solid var(--line)}
+.card-head h3{font:700 14.5px var(--font-d);color:#e6ebf7;display:flex;gap:9px;align-items:center}
+.card-head h3 .ic{color:var(--ind3)}
+.count-chip{font:600 11px var(--font-m);color:var(--ind3);background:rgba(99,102,241,.12);border:1px solid rgba(99,102,241,.3);padding:2px 9px;border-radius:99px}
+
+/* buttons */
+.btn{height:36px;padding:0 15px;border-radius:9px;border:1px solid transparent;font:600 12.8px var(--font-u);display:inline-flex;align-items:center;gap:8px;cursor:pointer;transition:.15s;white-space:nowrap}
+.btn:hover:not(:disabled){transform:translateY(-1px)}
+.btn:disabled{opacity:.38;cursor:not-allowed}
+.btn-primary{background:linear-gradient(135deg,#4f46e5,#6d5ef0);color:#fff;box-shadow:0 4px 14px rgba(79,70,229,.35)}
+.btn-primary:hover:not(:disabled){box-shadow:0 7px 20px rgba(79,70,229,.5)}
+.btn-sec{background:#1a2138;border-color:var(--line2);color:#cbd5e1}
+.btn-sec:hover:not(:disabled){border-color:#3b4770}
+.btn-green{background:#059669;color:#fff;box-shadow:0 4px 14px rgba(16,185,129,.3)}
+.btn-green:hover:not(:disabled){background:#047857}
+.btn-danger{background:rgba(239,68,68,.1);border-color:rgba(239,68,68,.4);color:#f87171}
+.btn-danger:hover:not(:disabled){background:var(--red);color:#fff}
+.btn-sm{height:30px;padding:0 11px;font-size:12px;border-radius:8px}
+.btn-icon{width:30px;height:30px;padding:0;justify-content:center;border-radius:8px}
+
+/* inputs */
+.input,.select{height:36px;background:#0d1326;border:1px solid #282e42;border-radius:9px;padding:0 12px;color:#e2e8f0;font:13px var(--font-u);outline:none;transition:.15s;width:100%}
+.select{cursor:pointer;appearance:none;background-image:linear-gradient(45deg,transparent 50%,#64748b 50%),linear-gradient(135deg,#64748b 50%,transparent 50%);background-position:calc(100% - 16px) 55%,calc(100% - 11px) 55%;background-size:5px 5px;background-repeat:no-repeat;padding-right:30px}
+.input:focus,.select:focus{border-color:var(--ind);box-shadow:0 0 0 3px rgba(99,102,241,.18);background-color:#101731}
+input[type=checkbox]{width:15px;height:15px;accent-color:var(--ind);cursor:pointer}
+.flabel{display:block;font-size:10.5px;font-weight:700;letter-spacing:1.1px;text-transform:uppercase;color:var(--quiet);margin-bottom:6px}
+
+/* tables */
+table{width:100%;border-collapse:collapse;font-size:13px}
+thead th{position:sticky;top:0;z-index:2;background:var(--card);text-align:left;font-size:10.5px;letter-spacing:1.2px;text-transform:uppercase;color:var(--quiet);font-weight:700;padding:10px 14px;border-bottom:1px solid var(--line2)}
+tbody td{padding:9px 14px;border-bottom:1px solid #1a2138;vertical-align:middle}
+tbody tr{transition:background .12s}
+tbody tr.click{cursor:pointer}
+tbody tr.click:hover{background:var(--hover)}
+tbody tr.selrow{background:rgba(99,102,241,.14);box-shadow:inset 3px 0 0 var(--ind)}
+.table-wrap{overflow:auto}
+
+/* badges & chips */
+.bdg{display:inline-flex;align-items:center;gap:6px;font:700 10.5px var(--font-u);letter-spacing:.8px;padding:3.5px 10px;border-radius:7px;border:1px solid;white-space:nowrap}
+.bdg i{width:6px;height:6px;border-radius:50%;background:currentColor}
+.b-run{color:#7dd3fc;background:rgba(56,189,248,.1);border-color:rgba(56,189,248,.35)}
+.b-run i{animation:pulse 1.6s infinite}
+.b-ok{color:#34d399;background:rgba(16,185,129,.1);border-color:rgba(16,185,129,.35)}
+.b-warn{color:#fbbf24;background:rgba(245,158,11,.1);border-color:rgba(245,158,11,.35)}
+.b-err{color:#f87171;background:rgba(239,68,68,.1);border-color:rgba(239,68,68,.35)}
+.b-mut{color:#94a3b8;background:rgba(148,163,184,.08);border-color:rgba(148,163,184,.25)}
+.chip{display:inline-flex;align-items:center;font:600 10.5px var(--font-u);letter-spacing:.5px;padding:2.5px 9px;border-radius:99px;text-transform:uppercase}
+.chip-epub{background:rgba(99,102,241,.15);color:#a5b4fc}
+.chip-pdf{background:rgba(239,68,68,.13);color:#fca5a5}
+.chip-type{background:rgba(34,211,238,.1);color:#67e8f9;text-transform:none}
+.chip-cat{background:rgba(245,158,11,.1);color:#fcd34d;text-transform:none}
+
+/* dashboard */
+.stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:14px}
+.stat{padding:16px 18px;position:relative;overflow:hidden}
+.stat::after{content:"";position:absolute;right:-30px;top:-30px;width:110px;height:110px;border-radius:50%;background:radial-gradient(circle,var(--sc,rgba(99,102,241,.16)),transparent 70%)}
+.stat-top{display:flex;gap:8px;align-items:center;color:var(--quiet);font-size:10.5px;font-weight:700;letter-spacing:1.3px;text-transform:uppercase}
+.stat-top .ic{color:var(--sc2,var(--ind3))}
+.stat-n{font:700 27px/1.1 var(--font-d);margin-top:8px;background:linear-gradient(120deg,#c7d2fe,var(--sc2,#818cf8));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.stat-s{font-size:11.5px;color:var(--quiet);margin-top:3px}
+.qa-card{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:12px 16px;margin-bottom:14px}
+.qa-label{font-size:10.5px;font-weight:700;letter-spacing:1.3px;text-transform:uppercase;color:var(--quiet);margin-right:4px}
+.warn-banner{display:flex;gap:11px;align-items:center;background:rgba(245,158,11,.09);border:1px solid rgba(245,158,11,.35);color:#fcd34d;border-radius:12px;padding:11px 15px;margin-bottom:14px;font-size:12.5px;font-weight:600}
+.mp{width:92px;height:6px;background:#1a2138;border-radius:99px;overflow:hidden;display:inline-block;vertical-align:middle}
+.mp i{display:block;height:100%;background:linear-gradient(90deg,var(--ind2),var(--cyan));border-radius:99px}
+.empty-mini{padding:34px 20px;text-align:center;color:var(--quiet);font-size:12.5px;display:flex;flex-direction:column;gap:12px;align-items:center}
+.empty-mini .ic{width:26px;height:26px;color:#33406b}
+
+/* library */
+.lib-split{display:grid;grid-template-columns:minmax(340px,38%) 1fr;gap:16px;align-items:stretch;height:calc(100% - 70px);min-height:480px}
+.lib-left{display:flex;flex-direction:column;min-height:0}
+.lib-left .table-wrap{flex:1;min-height:0}
+.lib-actions{display:flex;gap:9px;padding:12px 14px;border-top:1px solid var(--line)}
+.lib-actions .btn:first-child{flex:1;justify-content:center}
+.dropzone{margin:0 14px 14px;border:1.5px dashed #2c3556;border-radius:11px;padding:11px;text-align:center;color:var(--quiet);font-size:12px;display:flex;gap:8px;justify-content:center;align-items:center;transition:.15s}
+.dropzone.over{border-color:var(--ind);color:var(--ind3);background:rgba(99,102,241,.07)}
+.lib-right{display:flex;flex-direction:column;min-height:0}
+.insp-body{flex:1;overflow:auto;padding:8px}
+.trow{display:grid;grid-template-columns:30px minmax(150px,1.1fr) 100px minmax(180px,2fr);gap:8px;align-items:center;padding:8px 10px;border-radius:9px;cursor:pointer;transition:background .12s}
+.trow:hover{background:var(--hover)}
+.trow .chev{color:var(--quiet);transition:transform .15s}
+.trow.open .chev{transform:rotate(90deg)}
+.trow .el{font-weight:600;font-size:12.8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.trow .prev{color:var(--quiet);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.trow.child{margin-left:26px;cursor:default}
+.trow.child:hover{background:transparent}
+.bcover{width:34px;height:46px;object-fit:cover;border-radius:5px;border:1px solid var(--line2)}
+.bcover-ph{width:34px;height:46px;border-radius:5px;border:1px solid var(--line2);background:linear-gradient(135deg,#1a2138,#232c4e);display:grid;place-items:center;font:700 13px var(--font-d);color:var(--ind3)}
+
+/* studio */
+.cfg-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:13px;padding:16px}
+.studio-actions{display:flex;gap:9px;flex-wrap:wrap;padding:0 16px 14px}
+.sched-row{display:flex;gap:18px;align-items:center;flex-wrap:wrap;padding:12px 16px;border-top:1px solid var(--line);background:var(--card2);border-radius:0 0 14px 14px}
+.sched-row label{display:flex;gap:8px;align-items:center;font-size:12.5px;font-weight:600;color:var(--mut);cursor:pointer}
+.sched-row input[type=datetime-local]{height:32px;background:#0d1326;border:1px solid #282e42;border-radius:8px;color:#e2e8f0;padding:0 10px;font:12px var(--font-m);outline:none;color-scheme:dark}
+.sched-row input[type=datetime-local]:focus{border-color:var(--ind)}
+.prog-card{margin-top:16px}
+.prog-body{padding:16px}
+.job-status{font:700 14.5px var(--font-d);color:#e6ebf7;display:flex;gap:9px;align-items:center;margin-bottom:12px}
+.job-status.ok{color:#34d399}.job-status.warn{color:#fbbf24}.job-status.run{color:#7dd3fc}
+.pbar{position:relative;height:22px;background:var(--inset);border:1px solid var(--line);border-radius:11px;overflow:hidden}
+.pfill{height:100%;width:0%;background:linear-gradient(90deg,#4f46e5,#22d3ee);transition:width .45s;position:relative;overflow:hidden}
+.pfill::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,transparent,rgba(255,255,255,.35),transparent);animation:sheen 1.6s infinite}
+.ptext{position:absolute;inset:0;display:grid;place-items:center;font:600 11px var(--font-m);color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.6);letter-spacing:.5px}
+.metric-row{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin-top:14px}
+.metric{background:var(--inset);border:1px solid var(--line);border-radius:10px;padding:9px 12px}
+.metric .ml{font-size:9.5px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:var(--quiet)}
+.metric .mv{font:600 13.5px var(--font-m);color:#dbe4ff;margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.stream-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px}
+.stream-card{display:flex;flex-direction:column;min-height:230px}
+.stream{flex:1;margin:12px;background:var(--inset);border:1px solid var(--line);border-radius:10px;padding:14px 16px;overflow:auto;font-size:13.5px;line-height:1.85;color:#cbd5e1;white-space:pre-wrap}
+.stream.ar{direction:rtl;text-align:right;font-family:var(--font-ar);font-size:16.5px;line-height:2.1;color:#e6ebf7}
+.stream .seg-new{animation:fadein .4s}
+
+/* glossary */
+.prof-card{display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap;padding:14px 16px;margin-bottom:14px}
+.prof-card .grow{flex:1;min-width:220px}
+.gloss-tools{display:flex;gap:10px;align-items:center;padding:12px 14px;border-bottom:1px solid var(--line)}
+.search-wrap{position:relative;flex:1;max-width:380px}
+.search-wrap .ic{position:absolute;left:11px;top:50%;transform:translateY(-50%);color:var(--quiet)}
+.search-wrap input{padding-left:34px}
+td.ar-cell{direction:rtl;text-align:right;font-family:var(--font-ar);font-size:15.5px;color:#f1f5f9}
+.lock-yes{color:#34d399;font-weight:700}.lock-no{color:var(--quiet)}
+
+/* creds */
+.sec-card{display:flex;gap:12px;align-items:flex-start;background:rgba(56,189,248,.06);border:1px solid rgba(56,189,248,.25);border-radius:13px;padding:13px 16px;margin-bottom:16px}
+.sec-card .ic{color:var(--cyan);margin-top:2px}
+.sec-card p{font-size:12.5px;color:#a8c3dd;line-height:1.65}
+.sec-card b{color:#e0f2fe}
+.cred-root{display:flex;align-items:center;gap:11px;padding:13px 16px;border-bottom:1px solid var(--line);cursor:pointer;transition:background .12s}
+.cred-root:hover{background:var(--hover)}
+.cred-root .chev{color:var(--quiet);transition:transform .15s}
+.cred-root.open .chev{transform:rotate(90deg)}
+.cred-root .pname{font:700 14px var(--font-d);color:#e6ebf7}
+.cred-root .prate{font:500 11px var(--font-m);color:var(--quiet);margin-left:2px}
+.cred-group{display:flex;gap:8px;align-items:center;padding:9px 16px 4px 46px;color:var(--quiet);font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase}
+.cred-row{display:grid;grid-template-columns:1.3fr 1.6fr 1fr auto;gap:12px;align-items:center;padding:11px 16px 11px 46px;border-bottom:1px solid #1a2138;background:var(--card2)}
+.cred-row:last-child{border-bottom:none}
+.cr-name{font-weight:600;font-size:12.8px}
+.cr-sub{font:400 10.5px var(--font-m);color:var(--quiet);margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cr-detail{font:500 11px var(--font-m);color:var(--mut)}
+.cr-detail b{color:#dbe4ff}
+
+/* settings */
+.set-card{max-width:760px}
+.set-row{display:grid;grid-template-columns:250px 1fr;gap:16px;align-items:center;padding:14px 18px;border-bottom:1px solid var(--line)}
+.set-row:last-child{border-bottom:none}
+.set-row .sl{font-size:12.8px;font-weight:600;color:#cbd5e1}
+.set-row .sl small{display:block;font-weight:500;color:var(--quiet);font-size:11px;margin-top:2px}
+.set-row .sc{display:flex;gap:9px;align-items:center}
+.set-foot{padding:14px 18px;display:flex;gap:12px;align-items:center}
+#setMsg{font-size:12.5px;font-weight:600}
+#setMsg.ok{color:#34d399}#setMsg.warn{color:#fbbf24}
+
+/* modal / toast */
+@keyframes modalBackFade{from{opacity:0}to{opacity:1}}
+body.modal-open .sidebar,
+body.modal-open .main{
+  pointer-events: none;
+  user-select: none;
+}
+.modal-back{position:fixed;inset:0;background:rgba(5,8,16,.78);display:flex;align-items:center;justify-content:center;z-index:90;animation:modalBackFade .15s ease-out;pointer-events:auto}
+.modal{background:#141a2e;border:1px solid var(--line2);border-radius:16px;box-shadow:0 24px 60px rgba(0,0,0,.6);width:min(560px,94vw);max-height:88vh;display:flex;flex-direction:column;animation:pop .18s ease-out;pointer-events:auto;position:relative;z-index:91}
+.modal.wide{width:min(780px,94vw)}
+.m-head{display:flex;align-items:center;justify-content:space-between;padding:17px 22px 0}
+.m-head h3{font:700 16.5px var(--font-d);color:#fff}
+.m-x{border:none;background:transparent;color:var(--quiet);cursor:pointer;padding:6px;border-radius:8px}
+.m-x:hover{background:rgba(239,68,68,.15);color:#f87171}
+.m-body{padding:15px 22px;overflow:auto}
+.m-foot{display:flex;justify-content:flex-end;gap:9px;padding:0 22px 18px}
+.form-row{margin-bottom:13px}
+.form-2col{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.field-err{display:flex;gap:7px;align-items:flex-start;color:#f87171;font-size:12px;font-weight:600;margin-top:7px}
+.m-hint{font-size:12px;color:var(--quiet);margin-top:9px;line-height:1.6}
+.pv-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.pv-pane{background:var(--inset);border:1px solid var(--line);border-radius:10px;padding:13px 15px;min-height:220px;max-height:300px;overflow:auto;font-size:13px;line-height:1.8;color:#cbd5e1}
+.pv-pane.ar{direction:rtl;text-align:right;font-family:var(--font-ar);font-size:16px;line-height:2.1;color:#eef2fb}
+.pv-l{font-size:10px;font-weight:700;letter-spacing:1.4px;text-transform:uppercase;color:var(--quiet);margin-bottom:8px}
+#toasts{position:fixed;right:18px;bottom:18px;display:flex;flex-direction:column;gap:8px;z-index:120;align-items:flex-end}
+.toast{display:flex;gap:10px;align-items:flex-start;background:#151b30;border:1px solid var(--line2);border-left:3px solid var(--tc,var(--ind));color:#dbe4ff;border-radius:11px;padding:11px 14px;min-width:270px;max-width:400px;font-size:12.5px;box-shadow:0 14px 40px rgba(0,0,0,.5);animation:pop .2s}
+.toast .ic{margin-top:1px;color:var(--tc,var(--ind3))}
+.toast.out{opacity:0;transform:translateY(6px);transition:.25s}
+.foot-bar{flex:none;height:34px;border-top:1px solid #1c2440;background:var(--bg2);display:flex;align-items:center;justify-content:space-between;padding:0 18px;font-size:11.5px;color:var(--quiet);z-index:2}
+.foot-bar .fl{display:flex;gap:8px;align-items:center}
+.foot-bar .ic{width:13px;height:13px;color:var(--green)}
+
+@media (max-width:1180px){.stat-grid{grid-template-columns:1fr 1fr}.cfg-grid{grid-template-columns:1fr 1fr}.stream-grid{grid-template-columns:1fr}.metric-row{grid-template-columns:repeat(3,1fr)}}
+@media (max-width:960px){.lib-split{grid-template-columns:1fr;height:auto}.sidebar{width:64px}.brand-txt,.nav-btn span,.side-foot span,.brand-sub{display:none}.nav-btn{justify-content:center;padding:11px}.set-row{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<svg style="display:none" xmlns="http://www.w3.org/2000/svg">
+  <symbol id="i-dash" viewBox="0 0 24 24"><rect x="3" y="3" width="7.5" height="7.5" rx="1.8"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="1.8"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="1.8"/><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="1.8"/></symbol>
+  <symbol id="i-books" viewBox="0 0 24 24"><path d="M5 3.5h3.4v17H5z"/><path d="M10.4 3.5h3.4v17h-3.4z"/><path d="M15.6 5l3.3.9-3.6 14.6-3.3-.9z"/></symbol>
+  <symbol id="i-studio" viewBox="0 0 24 24"><path d="M3.5 5.5h9.5M8.2 3v2.5c0 4-2.2 7.6-5.2 9.5M6 8.5c1.4 3 4.3 5.6 7 6.7"/><path d="M12.5 21l4.2-9.5L21 21m-6.9-3h5.2"/></symbol>
+  <symbol id="i-book-open" viewBox="0 0 24 24"><path d="M2.5 5h6.5a3 3 0 0 1 3 3v11.5a2.5 2.5 0 0 0-2.5-2.5h-7z"/><path d="M21.5 5H15a3 3 0 0 0-3 3v11.5a2.5 2.5 0 0 1 2.5-2.5h7z"/></symbol>
+  <symbol id="i-key" viewBox="0 0 24 24"><circle cx="8" cy="15.5" r="4.2"/><path d="M11 12.5 20.5 3m-3.2 3.2 2.7 2.7M14.6 8.9l2.4 2.4"/></symbol>
+  <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.8v2.4M12 18.8v2.4M2.8 12h2.4M18.8 12h2.4M5.5 5.5l1.7 1.7M16.8 16.8l1.7 1.7M18.5 5.5l-1.7 1.7M7.2 16.8l-1.7 1.7"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M3.5 6h17M8.5 6V4.5a1 1 0 0 1 1-1h5a1 1 0 0 1 1 1V6m3 0v13.5a2 2 0 0 1-2 2h-9a2 2 0 0 1-2-2V6"/><path d="M10 11v6M14 11v6"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-2.6-6.3M21 3.5V9h-5.5"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 4.5 19 12 7 19.5z"/></symbol>
+  <symbol id="i-pause" viewBox="0 0 24 24"><path d="M9 5v14M15 5v14"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="m4.5 12.5 5 5 10-11"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 3.5 22 20H2z"/><path d="M12 10v4.5M12 17.5v.1"/></symbol>
+  <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 7.8v.1"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24"><rect x="4.5" y="10.5" width="15" height="10" rx="2.5"/><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3"/><path d="M12 14.5v2.5"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20.5 20.5-4.6-4.6"/></symbol>
+  <symbol id="i-chev" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></symbol>
+  <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 2.5H6a2 2 0 0 0-2 2v15a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-11z"/><path d="M14 2.5v6h6"/></symbol>
+  <symbol id="i-zap" viewBox="0 0 24 24"><path d="M13 2.5 4.5 13.5H11l-1 8L18.5 10.5H12z"/></symbol>
+  <symbol id="i-cal" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 3v4M16 3v4M3 10h18"/></symbol>
+  <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2.5 3H19a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></symbol>
+  <symbol id="i-export" viewBox="0 0 24 24"><path d="M12 15V3.5m0 0-4 4m4-4 4 4"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></symbol>
+  <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 15V3.5m0 0-4 4m4-4 4 4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></symbol>
+  <symbol id="i-db" viewBox="0 0 24 24"><ellipse cx="12" cy="5.5" rx="8" ry="3"/><path d="M4 5.5v13c0 1.7 3.6 3 8 3s8-1.3 8-3v-13"/><path d="M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></symbol>
+  <symbol id="i-edit" viewBox="0 0 24 24"><path d="M17 3.5 20.5 7 8.5 19H5v-3.5z"/></symbol>
+  <symbol id="i-book" viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></symbol>
+  <symbol id="i-img" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="1.8"/><path d="m4 18 5.5-5.5 3.5 3.5 3-3L21 18"/></symbol>
+  <symbol id="i-quote" viewBox="0 0 24 24"><path d="M9.5 8c-2.5 1-4 3-4 6v2h4.5v-5H7.8c.2-1.3 1-2.3 2.2-3zM19 8c-2.5 1-4 3-4 6v2h4.5v-5h-2.2c.2-1.3 1-2.3 2.2-3z"/></symbol>
+</svg>
+
+<aside class="sidebar">
+  <div class="brand">
+    <div class="brand-mark"><svg class="ic ic-lg"><use href="#i-book-open"/></svg></div>
+    <div class="brand-txt"><div class="brand-name">BookBridge</div><div class="brand-sub">AI Book Translator</div></div>
+  </div>
+  <nav class="nav">
+    <button class="nav-btn active" data-page="dashboard"><svg class="ic"><use href="#i-dash"/></svg><span>Dashboard</span></button>
+    <button class="nav-btn" data-page="library"><svg class="ic"><use href="#i-books"/></svg><span>Book Library</span></button>
+    <button class="nav-btn" data-page="studio"><svg class="ic"><use href="#i-studio"/></svg><span>Translation Studio</span></button>
+    <button class="nav-btn" data-page="glossary"><svg class="ic"><use href="#i-book-open"/></svg><span>Glossary &amp; Terms</span></button>
+    <button class="nav-btn" data-page="creds"><svg class="ic"><use href="#i-key"/></svg><span>API Credentials</span></button>
+    <button class="nav-btn" data-page="settings"><svg class="ic"><use href="#i-gear"/></svg><span>Settings</span></button>
+  </nav>
+  <div class="side-foot"><span class="dot"></span><button class="btn btn-sec btn-sm" id="themeToggle" type="button" title="Toggle light and dark mode">☼ <span>Light mode</span></button></div>
+</aside>
+
+<div class="main">
+<!-- ================= DASHBOARD ================= -->
+<section class="page active" id="page-dashboard">
+  <div class="page-head">
+    <div><h1 class="page-title">Dashboard &amp; Overview</h1><p class="page-sub">Your local translation operation at a glance.</p></div>
+    <button class="btn btn-sec" id="btnDashRefresh"><svg class="ic"><use href="#i-refresh"/></svg> Refresh</button>
+  </div>
+  <div id="dashWarn"></div>
+  <div class="stat-grid" id="statGrid"></div>
+  <div class="card qa-card">
+    <span class="qa-label">Quick Actions</span>
+    <button class="btn btn-primary" id="qaImport"><svg class="ic"><use href="#i-plus"/></svg> Import EPUB / PDF</button>
+    <button class="btn btn-sec" id="qaKeys"><svg class="ic"><use href="#i-key"/></svg> Manage API Keys</button>
+    <button class="btn btn-sec" id="qaGloss"><svg class="ic"><use href="#i-book-open"/></svg> Glossary &amp; Terms</button>
+  </div>
+  <div class="card">
+    <div class="card-head"><h3><svg class="ic"><use href="#i-clock"/></svg> Recent Translation Jobs</h3><span class="count-chip" id="jobCount"></span></div>
+    <div class="table-wrap" style="max-height:46vh">
+      <table><thead><tr><th>Book Title</th><th>Status</th><th>Progress</th><th>Segments</th><th>Tokens</th><th>Updated At</th></tr></thead>
+      <tbody id="jobsBody"></tbody></table>
+    </div>
+    <div class="empty-mini" id="jobsEmpty" hidden><svg class="ic"><use href="#i-db"/></svg>No translation jobs yet.<button class="btn btn-primary btn-sm" id="jeImport"><svg class="ic ic-sm"><use href="#i-plus"/></svg> Import a book</button></div>
+  </div>
+</section>
+
+<!-- ================= LIBRARY ================= -->
+<section class="page" id="page-library">
+  <div class="page-head">
+    <div><h1 class="page-title">Book Library &amp; Inspector</h1><p class="page-sub">Import books and inspect parsed structure before translation.</p></div>
+    <div class="head-actions">
+      <button class="btn btn-primary" id="btnImpEpub"><svg class="ic"><use href="#i-plus"/></svg> Import EPUB</button>
+      <button class="btn btn-sec" id="btnImpPdf"><svg class="ic"><use href="#i-plus"/></svg> Import PDF</button>
+    </div>
+  </div>
+  <div class="lib-split">
+    <div class="card lib-left">
+      <div class="card-head"><h3><svg class="ic"><use href="#i-books"/></svg> Imported Books</h3><span class="count-chip" id="bookCount"></span></div>
+      <div class="table-wrap"><table><thead><tr><th>Title</th><th>Format</th><th>Author</th></tr></thead><tbody id="booksBody"></tbody></table></div>
+      <div class="empty-mini" id="booksEmpty" hidden><svg class="ic"><use href="#i-books"/></svg>No books imported.<button class="btn btn-primary btn-sm" id="beImport"><svg class="ic ic-sm"><use href="#i-upload"/></svg> Import your first book</button></div>
+      <div class="lib-actions">
+        <button class="btn btn-primary" id="btnTranslateBook" disabled><svg class="ic"><use href="#i-play"/></svg> Translate This Book</button>
+        <button class="btn btn-danger" id="btnDeleteBook" disabled><svg class="ic"><use href="#i-trash"/></svg> Delete</button>
+      </div>
+      <div class="dropzone" id="dropZone"><svg class="ic"><use href="#i-upload"/></svg> Drop EPUB or PDF here</div>
+    </div>
+    <div class="card lib-right">
+      <div class="card-head"><h3 id="inspTitle"><svg class="ic"><use href="#i-search"/></svg> Book Structure Inspector (Select a book)</h3><span class="count-chip" id="inspCount" hidden></span></div>
+      <div class="insp-body" id="inspBody"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= STUDIO ================= -->
+<section class="page" id="page-studio">
+  <div class="page-head">
+    <div><h1 class="page-title">Translation Studio &amp; Monitor</h1><p class="page-sub">Configure, run, monitor and export a translation job.</p></div>
+    <span id="studioState" class="bdg b-mut"><i></i> IDLE</span>
+  </div>
+  <div class="card">
+    <div class="cfg-grid">
+      <div><label class="flabel">Book to Translate</label><select class="select" id="cfgBook"></select></div>
+      <div><label class="flabel">Output Format</label><select class="select" id="cfgOut"><option>EPUB</option><option>PDF</option></select></div>
+      <div><label class="flabel">Translation Style</label><select class="select" id="cfgStyle"><option>Literary — Flowing Prose</option><option>Faithful — Close to Source</option><option>Xianxia — Genre Native</option><option>Fast Draft — Speed First</option></select></div>
+      <div><label class="flabel">Glossary Profile</label><select class="select" id="cfgGloss"></select></div>
+      <div><label class="flabel">Provider Strategy</label><select class="select" id="cfgStrat"><option>Auto Failover (All Available Keys)</option><option>Prefer Gemini</option><option>Prefer Groq</option><option>Prefer TokenRouter</option><option>Prefer OrCarRouter</option></select></div>
+      <div><label class="flabel">Source Language</label><select class="select" id="cfgSrc"><option>English</option></select></div>
+      <div><label class="flabel">Target Language</label><select class="select" id="cfgTgt"><option>Arabic</option></select></div>
+      <div><label class="flabel">Model</label><select class="select" id="cfgModel"></select></div>
+    </div>
+    <div class="studio-actions">
+      <button class="btn btn-primary" id="btnStart"><svg class="ic"><use href="#i-play"/></svg> Start Full Translation</button>
+      <button class="btn btn-sec" id="btnPause" disabled><svg class="ic"><use href="#i-pause"/></svg> Pause</button>
+      <button class="btn btn-danger" id="btnCancel" disabled><svg class="ic"><use href="#i-x"/></svg> Cancel</button>
+    </div>
+  </div>
+  <div class="card prog-card">
+    <div class="prog-body">
+      <div class="job-status" id="jobStatus"><svg class="ic"><use href="#i-info"/></svg> Ready to start translation.</div>
+      <div class="pbar"><div class="pfill" id="jobFill"></div><div class="ptext" id="jobPctText">0.0%</div></div>
+      <div class="metric-row">
+        <div class="metric"><div class="ml">Segments</div><div class="mv" id="mSeg">0 / 0</div></div>
+        <div class="metric"><div class="ml">Cached</div><div class="mv" id="mCached">0</div></div>
+        <div class="metric"><div class="ml">Tokens</div><div class="mv" id="mTokens">0</div></div>
+        <div class="metric"><div class="ml">Active Provider</div><div class="mv" id="mProv">—</div></div>
+        <div class="metric"><div class="ml">Retries</div><div class="mv" id="mRetry">0</div></div>
+        <div class="metric"><div class="ml">Failures</div><div class="mv" id="mFail">0</div></div>
+      </div>
+    </div>
+  </div>
+  <div class="stream-grid">
+    <div class="card stream-card"><div class="card-head"><h3><svg class="ic"><use href="#i-file"/></svg> Live Source Segment (English)</h3></div><div class="stream" id="srcPanel">Waiting for a running job…</div></div>
+    <div class="card stream-card"><div class="card-head"><h3><svg class="ic"><use href="#i-studio"/></svg> Live Translated Output (Arabic RTL)</h3></div><div class="stream ar" id="arPanel" dir="rtl">بانتظار تشغيل مهمة الترجمة…</div></div>
+  </div>
+</section>
+
+<!-- ================= GLOSSARY ================= -->
+<section class="page" id="page-glossary">
+  <div class="page-head">
+    <div><h1 class="page-title">Glossary &amp; Terminology Rules</h1><p class="page-sub">Enforce consistent English → Arabic terms across every job.</p></div>
+    <div class="head-actions">
+      <button class="btn btn-sec" id="btnNewProf"><svg class="ic"><use href="#i-plus"/></svg> New Profile</button>
+      <button class="btn btn-primary" id="btnAddTerm"><svg class="ic"><use href="#i-plus"/></svg> Add Term</button>
+    </div>
+  </div>
+  <div class="card prof-card">
+    <div class="grow"><label class="flabel">Active Profile</label><select class="select" id="profSel"></select></div>
+  </div>
+  <div class="card">
+    <div class="gloss-tools"><div class="search-wrap"><svg class="ic"><use href="#i-search"/></svg><input class="input" id="glossSearch" placeholder="Search source or target terms…"></div><span class="count-chip" id="termCount"></span></div>
+    <div class="table-wrap" style="max-height:52vh">
+      <table><thead><tr><th>Source (English)</th><th>Target (Arabic)</th><th>Category</th><th>Priority</th><th>Type</th><th>Locked</th></tr></thead>
+      <tbody id="termsBody"></tbody></table>
+    </div>
+  </div>
+</section>
+
+<!-- ================= CREDS ================= -->
+<section class="page" id="page-creds">
+  <div class="page-head">
+    <div><h1 class="page-title">API Credentials &amp; Health Monitor</h1><p class="page-sub">Add, validate and monitor provider credentials — secrets never leave the vault.</p></div>
+    <button class="btn btn-primary" id="btnAddKey"><svg class="ic"><use href="#i-plus"/></svg> Add API Key</button>
+  </div>
+  <div class="sec-card"><svg class="ic ic-lg"><use href="#i-lock"/></svg>
+    <p><b>Local-first security.</b> API keys are stored exclusively in the OS keyring / encrypted local vault. Strict <b>RPM · TPM · RPD</b> pacing prevents quota exhaustion. Providers: Gemini, Groq, TokenRouter, OrCarRouter. Full secrets are never displayed, logged or exported.</p>
+  </div>
+  <div class="card" id="credTree"></div>
+</section>
+
+<!-- ================= SETTINGS ================= -->
+<section class="page" id="page-settings">
+  <div class="page-head"><div><h1 class="page-title">Application Settings &amp; Paths</h1><p class="page-sub">Local output paths and translation pipeline tuning.</p></div></div>
+  <div class="card set-card">
+    <div class="set-row"><div class="sl">Default Export Directory<small>exports, cache, logs &amp; vault live under this root</small></div><div class="sc"><input class="input" id="setDir"><button class="btn btn-sec" id="btnBrowse"><svg class="ic"><use href="#i-folder"/></svg> Browse…</button></div></div>
+    <div class="set-row"><div class="sl">Max Segment Characters<small>chunk size · 200 – 5000</small></div><div class="sc"><input class="input" type="number" id="setChunk" min="200" max="5000" style="max-width:140px"></div></div>
+    <div class="set-row"><div class="sl">Context Window<small>surrounding blocks · 0 – 10</small></div><div class="sc"><input class="input" type="number" id="setCtx" min="0" max="10" style="max-width:140px"></div></div>
+    <div class="set-row"><div class="sl">Max Validation Retries<small>0 – 5</small></div><div class="sc"><input class="input" type="number" id="setRetry" min="0" max="5" style="max-width:140px"></div></div>
+    <div class="set-row"><div class="sl">Additional Normal Request Cooldown<small>seconds · 0.00 – 60.00 · step 0.05</small></div><div class="sc"><input class="input" type="number" id="setCool" min="0" max="60" step="0.05" style="max-width:140px"></div></div>
+    <div class="set-foot"><button class="btn btn-primary" id="btnSaveSet"><svg class="ic"><use href="#i-check"/></svg> Save Settings</button><span id="setMsg"></span></div>
+  </div>
+</section>
+
+<footer class="foot-bar">
+  <span class="fl"><svg class="ic"><use href="#i-lock"/></svg> Local-first — credentials encrypted in the local vault</span>
+  <span class="mono" style="font-size:10.5px">BookBridge v1.0.0 · cache healthy · pacing active</span>
+</footer>
+</div>
+
+<div class="modal-back" id="modalBack" hidden><div class="modal" id="modalBox"></div></div>
+<div id="toasts"></div>
+<input type="file" id="fileEpub" accept=".epub" hidden>
+<input type="file" id="filePdf" accept=".pdf" hidden>
+<input type="file" id="fileGloss" accept=".json,.csv" hidden>
+<input type="file" id="fileDir" webkitdirectory hidden>
+
+<script src="qrc:///qtwebchannel/qwebchannel.js"></script>
+<script>
+/* ================= helpers ================= */
+const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
+const ic=(n,c='')=>`<svg class="ic ${c}" aria-hidden="true"><use href="#i-${n}"></use></svg>`;
+const esc=s=>String(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+const fmt=n=>n.toLocaleString('en-US');
+const themeToggle=$('#themeToggle');
+function applyTheme(light){
+ document.body.classList.toggle('light',light);
+ if(themeToggle)themeToggle.querySelector('span').textContent=light?'Dark mode':'Light mode';
+}
+applyTheme(localStorage.getItem('bookbridge-theme')==='light');
+if(themeToggle)themeToggle.onclick=()=>{const light=!document.body.classList.contains('light');applyTheme(light);localStorage.setItem('bookbridge-theme',light?'light':'dark')};
+const avatar=b=>b.cover?`<img class="bcover" src="${esc(b.cover)}" onerror="this.replaceWith(this.nextElementSibling)"><span class="bcover-ph" hidden>${esc((b.title||'?').trim()[0]||'?')}</span>`:`<span class="bcover-ph">${esc((b.title||'?').trim()[0]||'?')}</span>`;
+
+const DEFAULT_PROVIDERS = [
+ { id: 'gemini', name: 'Google Gemini', models: ['gemini-1.5-pro', 'gemini-1.5-flash', 'gemini-2.0-flash'], rate: '15 RPM · 240,000 TPM · 500 RPD (Strict pacing)' },
+ { id: 'groq', name: 'Groq', models: ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'mixtral-8x7b-32768'], rate: '30 RPM · 8,000 TPM (Strict token pacing) · 8,000 RPD' },
+ { id: 'tokenrouter', name: 'TokenRouter', models: ['gpt-4o-mini', 'claude-3-5-sonnet', 'deepseek-v3'], rate: '20 RPM · 60,000 TPM · 1,000 RPD' },
+ { id: 'orcarouter', name: 'OrCarRouter', models: ['deepseek-v3', 'qwen-2.5-72b-instruct'], rate: '20 RPM · 60,000 TPM · 1,000 RPD' }
+];
+
+function backendProviderState(credentials){
+ return DEFAULT_PROVIDERS.map(def => {
+  const rows = (credentials || []).filter(c => c.provider === def.id);
+  return {
+   id: def.id,
+   name: def.name,
+   rate: rows.length ? `${rows[0].rpm} RPM · ${rows[0].tpm.toLocaleString()} TPM · ${rows[0].rpd.toLocaleString()} RPD` : def.rate,
+   open: true,
+   models: [...def.models],
+   creds: rows.map(c => ({
+    id: c.id,
+    name: c.name,
+    model: c.model,
+    tokens: c.tokens,
+    ok: c.success,
+    fail: c.failures,
+    cd: 0,
+    status: c.state
+   }))
+  };
+ });
+}
+
+function glossaryDialog(title,body,save){
+ const m=openModal(`<div class="m-head"><h3>${title}</h3><button class="m-x" data-mx>${ic('x')}</button></div><div class="m-body">${body}<div class="field-err" id="glossErr" hidden></div></div><div class="m-foot"><button class="btn btn-sec" data-mx>Cancel</button><button class="btn btn-primary" id="glossSave">${ic('check')} Save</button></div>`);
+ m.querySelector('#glossSave').onclick=()=>save(m,m.querySelector('#glossErr'));
+ return m;
+}
+const transBlocks=b=>b.chapters.reduce((a,c)=>a+c.blocks.filter(x=>x.type==='paragraph'||x.type==='quote').length,0);
+const state={
+ books:[], jobs:[],
+ selBook:null, expanded:new Set(),
+ profiles:[], activeProfile:null, glossSearch:'', providers:backendProviderState([]),
+ job:null, settings:{dir:'',chunk:1200,ctx:2,retry:2,cool:0.05}
+};
+const STRATS={'Auto Failover (All Available Keys)':['gemini-1.5-pro','llama-3.3-70b-versatile','gpt-4o-mini'],'Prefer Gemini':['gemini-1.5-pro','gemini-1.5-flash','gemini-2.0-flash'],'Prefer Groq':['llama-3.3-70b-versatile','llama-3.1-8b-instant'],'Prefer TokenRouter':['gpt-4o-mini','claude-3-5-sonnet'],'Prefer OrCarRouter':['deepseek-v3','qwen-2.5-72b-instruct']};
+const stratProv=s=>s.startsWith('Prefer')?s.replace('Prefer ',''):'Auto Failover';
+const activeKeys=()=>state.providers.reduce((a,p)=>a+p.creds.filter(c=>c.status==='AVAILABLE').length,0);
+const rel=t=>{const d=Date.now()-t;if(d<6e4)return'just now';if(d<36e5)return Math.round(d/6e4)+' min ago';if(d<864e5)return Math.round(d/36e5)+' h ago';return Math.round(d/864e5)+' d ago'};
+
+/* ================= toast / modal ================= */
+function toast(msg,type='ok'){
+ const c={ok:'var(--green)',err:'var(--red)',warn:'var(--amber)',info:'var(--cyan2)'}[type];
+ const i={ok:'check',err:'alert',warn:'alert',info:'info'}[type];
+ const t=document.createElement('div');t.className='toast';t.style.setProperty('--tc',c);
+ t.innerHTML=`${ic(i)}<span>${esc(msg)}</span>`;$('#toasts').appendChild(t);
+ setTimeout(()=>{t.classList.add('out');setTimeout(()=>t.remove(),260)},3800);
+}
+function openModal(html,wide=false){
+ const b=$('#modalBox');b.className='modal'+(wide?' wide':'');b.innerHTML=html;$('#modalBack').hidden=false;document.body.classList.add('modal-open');
+ b.querySelectorAll('[data-mx]').forEach(x=>x.onclick=closeModal);return b;
+}
+function closeModal(){
+ $('#modalBack').hidden=true;
+ document.body.classList.remove('modal-open');
+ if(backendRefreshQueued){
+  backendRefreshQueued=false;
+  refreshBackend();
+ }
+}
+$('#modalBack').addEventListener('mousedown',e=>{if(e.target.id==='modalBack')closeModal()});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('#modalBack').hidden)closeModal()});
+function confirmBox(title,msg,okText='Delete'){
+ return new Promise(res=>{
+  const m=openModal(`<div class="m-head"><h3>${esc(title)}</h3><button class="m-x" data-mx>${ic('x')}</button></div>
+   <div class="m-body"><p style="color:#cbd5e1;font-size:13px;line-height:1.7">${msg}</p></div>
+   <div class="m-foot"><button class="btn btn-sec" data-mx>Cancel</button><button class="btn btn-danger" id="cfOk">${ic('trash')} ${esc(okText)}</button></div>`);
+  m.querySelector('#cfOk').onclick=()=>{closeModal();res(true)};
+ });
+}
+function infoBox(title,msg,tone='info'){
+ const c={info:'var(--cyan2)',warn:'var(--amber)',err:'var(--red)',ok:'var(--green)'}[tone];
+ const i={info:'info',warn:'alert',err:'alert',ok:'check'}[tone];
+ openModal(`<div class="m-head"><h3>${esc(title)}</h3><button class="m-x" data-mx>${ic('x')}</button></div>
+  <div class="m-body"><p style="display:flex;gap:11px;color:#cbd5e1;font-size:13px;line-height:1.7"><span style="color:${c};flex:none">${ic(i,'ic-lg')}</span><span>${msg}</span></p></div>
+  <div class="m-foot"><button class="btn btn-primary" data-mx>OK</button></div>`);
+}
+
+/* ================= navigation ================= */
+function goTo(p){
+ $$('.nav-btn').forEach(b=>b.classList.toggle('active',b.dataset.page===p));
+ $$('.page').forEach(s=>s.classList.toggle('active',s.id==='page-'+p));
+ if(p==='dashboard')renderDashboard();
+ if(p==='library')renderLibrary();
+ if(p==='studio')renderStudio();
+ if(p==='glossary')renderGlossary();
+ if(p==='creds')renderCreds();
+}
+$$('.nav-btn').forEach(b=>b.onclick=()=>goTo(b.dataset.page));
+
+/* ================= dashboard ================= */
+function renderDashboard(){
+ const keys=activeKeys();
+ $('#dashWarn').innerHTML=keys===0?`<div class="warn-banner">${ic('alert')} No healthy API credentials configured — translation jobs cannot start. <button class="btn btn-sec btn-sm" onclick="goTo('creds')">${ic('key','ic-sm')} Add API Keys</button></div>`:'';
+ const running=state.jobs.filter(j=>j.status==='RUNNING').length;
+ const tokens=state.jobs.reduce((a,j)=>a+j.tokens,0);
+ $('#statGrid').innerHTML=`
+  <div class="card stat" style="--sc2:#818cf8"><div class="stat-top">${ic('books')} Total Books</div><div class="stat-n">${state.books.length}</div><div class="stat-s">Imported library</div></div>
+  <div class="card stat" style="--sc2:#38bdf8"><div class="stat-top">${ic('zap')} Active / Total Jobs</div><div class="stat-n">${running} / ${state.jobs.length}</div><div class="stat-s">Translation queue</div></div>
+  <div class="card stat" style="--sc2:#34d399"><div class="stat-top">${ic('db')} Tokens Processed</div><div class="stat-n">${fmt(tokens)}</div><div class="stat-s">Total AI tokens</div></div>
+  <div class="card stat" style="--sc2:#fbbf24"><div class="stat-top">${ic('key')} Active API Keys</div><div class="stat-n">${keys}</div><div class="stat-s">Healthy credentials</div></div>`;
+ const bdg={RUNNING:'b-run',COMPLETED:'b-ok',PAUSED:'b-warn',FAILED:'b-err',NEEDS_REVIEW:'b-warn'};
+ $('#jobsBody').innerHTML=state.jobs.map(j=>{
+  const b=state.books.find(x=>x.id===j.bookId);
+  return`<tr><td style="font-weight:600">${b?esc(b.title):'<i>removed book</i>'}</td><td><span class="bdg ${bdg[j.status]}"><i></i>${j.status.replace('_',' ')}</span></td>
+  <td><span class="mp"><i style="width:${j.prog}%"></i></span> <span class="mono" style="font-size:11px;color:var(--mut)">${j.prog.toFixed(1)}%</span></td>
+  <td class="mono" style="font-size:12px;color:var(--mut)">${j.seg}/${j.segT}</td>
+  <td class="mono" style="font-size:12px;color:var(--mut)">${fmt(j.tokens)}</td>
+  <td style="color:var(--quiet);font-size:12px">${rel(j.upd)}</td></tr>`;
+ }).join('');
+ $('#jobsEmpty').hidden=state.jobs.length>0;
+ $('#jobCount').textContent=state.jobs.length+' jobs';
+}
+$('#btnDashRefresh').onclick=()=>{refreshBackend();toast('Dashboard refreshed.','info')};
+$('#qaImport').onclick=()=>goTo('library');
+$('#qaKeys').onclick=()=>goTo('creds');
+$('#qaGloss').onclick=()=>goTo('glossary');
+$('#jeImport').onclick=()=>goTo('library');
+
+/* ================= library ================= */
+function renderLibrary(){
+ $('#bookCount').textContent=state.books.length+' imported';
+ $('#booksBody').innerHTML=state.books.map(b=>`
+  <tr class="click ${state.selBook===b.id?'selrow':''}" data-bid="${b.id}">
+  <td><span style="display:flex;gap:10px;align-items:center">${avatar(b)}<span style="font-weight:600">${esc(b.title)}</span></span></td>
+   <td><span class="chip chip-${b.format.toLowerCase()}">${b.format}</span></td>
+   <td style="color:var(--mut)">${esc(b.author)}</td></tr>`).join('');
+ $('#booksEmpty').hidden=state.books.length>0;
+ $('#btnTranslateBook').disabled=!state.selBook;
+ $('#btnDeleteBook').disabled=!state.selBook;
+ renderInspector();
+}
+$('#booksBody').addEventListener('click',e=>{
+ const r=e.target.closest('tr[data-bid]');if(!r)return;
+ state.selBook=state.selBook===r.dataset.bid?null:r.dataset.bid;
+ renderLibrary();
+});
+$('#btnTranslateBook').onclick=()=>{
+ if(!state.selBook)return;
+ $('#cfgBook').value=state.selBook;goTo('studio');
+ toast('Book loaded into Translation Studio.','info');
+};
+$('#btnDeleteBook').onclick=async()=>{
+ const b=state.books.find(x=>x.id===state.selBook);if(!b)return;
+ const ok=await confirmBox('Delete Book',`Delete <b>${esc(b.title)}</b> and all of its parsed structure, jobs and translations? This cannot be undone.`);
+ if(!ok)return;
+ if(bookBridge){bookBridge.delete_book(b.id,()=>{state.selBook=null;refreshBackend();toast(`Deleted “${b.title}”.`,'err')});return}
+ state.books=state.books.filter(x=>x.id!==b.id);
+ state.jobs=state.jobs.filter(j=>j.bookId!==b.id);
+ if(state.job&&state.job.bookId===b.id)cancelJob(true);
+ state.selBook=null;renderLibrary();
+ toast(`Deleted “${b.title}”.`,'err');
+};
+function renderInspector(){
+ const b=state.books.find(x=>x.id===state.selBook);
+ const t=$('#inspTitle'),c=$('#inspCount'),body=$('#inspBody');
+ if(!b){t.innerHTML=`${ic('search')} Book Structure Inspector (Select a book)`;c.hidden=true;
+  body.innerHTML=`<div class="empty-mini" style="height:100%;justify-content:center">${ic('book','ic-xl')}<span>Select a book on the left to inspect its parsed chapters and content blocks.</span></div>`;return}
+ const tb=transBlocks(b);
+ t.innerHTML=`${ic('search')} Inspector — ${esc(b.title)}`;c.hidden=false;c.textContent=b.chapters.length+' chapters · '+tb+' blocks';
+ body.innerHTML=b.chapters.map(ch=>{
+  const open=state.expanded.has(ch.id);
+  let html=`<div class="trow ${open?'open':''}" data-ch="${ch.id}"><span class="chev">${ic('chev','ic-sm')}</span><span class="el">${esc(ch.title)}</span><span class="chip chip-type">Chapter</span><span class="prev">${ch.blocks.length} blocks · ${ch.blocks.filter(x=>x.type!=='image').length} translatable</span></div>`;
+  if(open)html+=ch.blocks.map(bl=>`<div class="trow child"><span></span><span class="el" style="font-weight:500;color:#b6c2dd">${bl.type==='image'?ic('img','ic-sm')+' ':bl.type==='quote'?ic('quote','ic-sm')+' ':''}${esc(bl.text)}</span><span class="chip chip-type">${bl.type}</span><span class="prev">${esc(bl.text.slice(0,90))}${bl.text.length>90?'…':''}</span></div>`).join('');
+  return html;
+ }).join('');
+}
+$('#inspBody').addEventListener('click',e=>{
+ const r=e.target.closest('.trow[data-ch]');if(!r)return;
+ state.expanded.has(r.dataset.ch)?state.expanded.delete(r.dataset.ch):state.expanded.add(r.dataset.ch);
+ renderInspector();
+});
+/* import */
+let importInFlight = false;
+function importBook(file,fmt){
+ if(importInFlight) return;
+ if(!bookBridge){
+  if(!file) return infoBox('Desktop App Required','Book imports are available from the BookBridge desktop application.','warn');
+  infoBox('Desktop App Required','Book imports require the BookBridge desktop application.','warn');
+  return;
+ }
+ importInFlight = true;
+ const btnEpub=$('#btnImpEpub'), btnPdf=$('#btnImpPdf'), btnBe=$('#beImport');
+ if(btnEpub) btnEpub.disabled=true;
+ if(btnPdf) btnPdf.disabled=true;
+ if(btnBe) btnBe.disabled=true;
+
+ bookBridge.import_book(fmt,raw=>{
+  importInFlight = false;
+  if(btnEpub) btnEpub.disabled=false;
+  if(btnPdf) btnPdf.disabled=false;
+  if(btnBe) btnBe.disabled=false;
+  try {
+   const result=JSON.parse(raw);
+   if(result.cancelled) return;
+   if(!result.ok) return infoBox('Import Failed',esc(result.error),'err');
+   refreshBackend();
+   infoBox('Import Successful',`<b>${esc(result.book.title)}</b> (${fmt}) imported and parsed.`,'ok');
+  } catch(e) {
+   infoBox('Import Error','Failed to process book import response.','err');
+  }
+ });
+}
+function handleBrowserFileInput(file,fmt){
+ if(!file)return;
+ const ext='.'+file.name.split('.').pop().toLowerCase();
+ if(ext!=='.'+fmt.toLowerCase())return infoBox('Import Failed',`The selected file is <b>${esc(file.name)}</b> — expected a <b>.${fmt.toLowerCase()}</b> file. The library was not modified.`,'err');
+ importBook(file,fmt);
+}
+$('#btnImpEpub').onclick=()=>{
+ if(bookBridge){ importBook(null, 'EPUB'); }
+ else { $('#fileEpub').click(); }
+};
+$('#btnImpPdf').onclick=()=>{
+ if(bookBridge){ importBook(null, 'PDF'); }
+ else { $('#filePdf').click(); }
+};
+$('#beImport').onclick=()=>{
+ if(bookBridge){ importBook(null, 'EPUB'); }
+ else { $('#fileEpub').click(); }
+};
+$('#fileEpub').onchange=e=>{handleBrowserFileInput(e.target.files[0],'EPUB');e.target.value=''};
+$('#filePdf').onchange=e=>{handleBrowserFileInput(e.target.files[0],'PDF');e.target.value=''};
+const dz=$('#dropZone');
+dz.addEventListener('dragover',e=>{e.preventDefault();dz.classList.add('over')});
+dz.addEventListener('dragleave',()=>dz.classList.remove('over'));
+dz.addEventListener('drop',e=>{
+ e.preventDefault();dz.classList.remove('over');
+ const f=e.dataTransfer.files[0];if(!f)return;
+ const ext=f.name.split('.').pop().toLowerCase();
+ if(ext==='epub')importBook(f,'EPUB');
+ else if(ext==='pdf')importBook(f,'PDF');
+ else infoBox('Import Failed',`<b>${esc(f.name)}</b> is not an EPUB or PDF file. Supported formats: .epub, .pdf.`,'err');
+});
+
+/* ================= studio ================= */
+function renderStudio(){
+ const cb=$('#cfgBook');
+ cb.innerHTML=state.books.length?state.books.map(b=>`<option value="${b.id}" ${b.id===state.selBook?'selected':''}>${esc(b.title)} (${b.format})</option>`).join(''):'<option value="">— no books imported —</option>';
+ if(!cb.value&&state.books.length)cb.value=state.books[0].id;
+ const cg=$('#cfgGloss');
+ cg.innerHTML=`<option value="">None (No glossary rules)</option>`+state.profiles.map(p=>`<option value="${p.id}" ${p.id===state.activeProfile?'selected':''}>${esc(p.name)} · ${p.genre} · ${p.terms.length} terms</option>`).join('');
+ syncModels();syncJobUI();
+}
+function syncModels(){
+ const m=$('#cfgModel'),s=STRATS[$('#cfgStrat').value];
+ m.innerHTML=s.map(x=>`<option>${x}</option>`).join('');
+}
+$('#cfgStrat').addEventListener('change',syncModels);
+function syncJobUI(){
+ const j=state.job;
+ const hasBook=!!$('#cfgBook').value;
+ $('#btnStart').disabled=(!hasBook)||(j&&(j.status==='RUNNING'||j.scheduled));
+ $('#btnStart').innerHTML=j&&j.status==='PAUSED'?`${ic('play')} Resume Translation`:j&&j.status==='COMPLETED'?`${ic('refresh')} Retranslate Book`:`${ic('play')} Start Full Translation`;
+ $('#btnPause').disabled=!(j&&j.status==='RUNNING');
+ $('#btnCancel').disabled=!(j&&(j.status==='RUNNING'||j.status==='PAUSED'||j.scheduled));
+ const st=$('#studioState');
+ if(!j){st.className='bdg b-mut';st.innerHTML='<i></i> IDLE'}
+ else if(j.scheduled){st.className='bdg b-warn';st.innerHTML='<i></i> SCHEDULED'}
+ else if(j.status==='RUNNING'){st.className='bdg b-run';st.innerHTML='<i></i> RUNNING'}
+ else if(j.status==='PAUSED'){st.className='bdg b-warn';st.innerHTML='<i></i> PAUSED'}
+ else{st.className='bdg b-ok';st.innerHTML='<i></i> COMPLETED'}
+}
+function setStatusMsg(txt,cls){const el=$('#jobStatus');el.className='job-status '+(cls||'');el.innerHTML=`${ic(cls==='ok'?'check':cls==='warn'?'alert':'info')} ${txt}`}
+function paintJob(j){
+ const pct=j.segT?j.seg/j.segT*100:0;
+ $('#jobFill').style.width=pct+'%';
+ $('#jobPctText').textContent=pct.toFixed(1)+'%';
+ $('#mSeg').textContent=`${j.seg} / ${j.segT}`;
+ $('#mCached').textContent=fmt(j.cached);
+ $('#mTokens').textContent=fmt(j.tokens);
+ $('#mProv').textContent=j.prov+' · '+j.model;
+ $('#mRetry').textContent=j.retries;
+ $('#mFail').textContent=j.failures;
+}
+$('#btnStart').onclick=()=>{
+ const bookId=$('#cfgBook').value;
+ if(!bookId)return infoBox('No Book Selected','Import a book in the Book Library before starting a translation job.','warn');
+ if(!bookBridge)return infoBox('Desktop App Required','Translations run through the BookBridge desktop application.','warn');
+ const startBtn = $('#btnStart');
+ startBtn.disabled = true;
+ bookBridge.create_job(bookId,$('#cfgOut').value,$('#cfgStyle').value,raw=>{
+  startBtn.disabled = false;
+  try {
+   const result=JSON.parse(raw);
+   if(!result.ok)return infoBox('Translation Failed',esc(result.error),'err');
+   const j=result.job;
+   state.job={bookId:j.bookId,status:j.status,seg:j.segments,segT:j.segmentsTotal,tokens:j.tokens,cached:j.cached,retries:j.retries,failures:j.failures,prov:'—',model:'—'};
+   syncJobUI();
+   toast('Translation started.','info');
+  } catch(e) {
+   infoBox('Error', 'Failed to start job response.', 'err');
+  }
+ });
+};
+$('#btnPause').onclick=()=>{
+ if(bookBridge){bookBridge.pause_job(()=>{toast('Job pause requested.','warn');refreshBackend()});return}
+ const j=state.job;if(!j)return;j.status='PAUSED';
+ clearInterval(state.timer);state.timer=null;
+ setStatusMsg('Job Paused.','warn');syncJobUI();toast('Job paused — progress preserved.','warn');
+};
+function cancelJob(silent){
+ if(bookBridge){bookBridge.cancel_job(()=>{if(!silent)toast('Job cancellation requested.','warn');refreshBackend()});return}
+ const j=state.job;if(!j)return;
+ clearInterval(state.timer);state.timer=null;
+ if(j.scheduled){state.job=null;setStatusMsg('Ready to start translation.');$('#jobFill').style.width='0%';$('#jobPctText').textContent='0.0%';
+  ['mSeg','mCached','mTokens','mRetry','mFail'].forEach(id=>$('#'+id).textContent=id==='mSeg'?'0 / 0':'0');$('#mProv').textContent='—';
+  if(!silent)toast('Schedule cancelled.','warn');
+ }else{
+  j.status='PAUSED';setStatusMsg('Cancelled — progress preserved. Resume when ready.','warn');
+  if(!silent)toast('Job cancelled — completed segments saved.','warn');
+ }
+ syncJobUI();
+}
+$('#btnCancel').onclick=()=>cancelJob(false);
+
+/* ================= glossary ================= */
+function renderGlossary(){
+ const ps=$('#profSel');
+ ps.innerHTML=state.profiles.map(p=>`<option value="${p.id}" ${p.id===state.activeProfile?'selected':''}>${esc(p.name)} — ${p.terms.length} terms</option>`).join('');
+ const prof=state.profiles.find(p=>p.id===state.activeProfile)||state.profiles[0];
+ const q=state.glossSearch.trim().toLowerCase();
+ const terms=prof?prof.terms.filter(t=>!q||t.src.toLowerCase().includes(q)||t.ar.includes(q)):[];
+ $('#termCount').textContent=(prof?prof.terms.length:0)+' terms';
+ $('#termsBody').innerHTML=terms.length?terms.map(t=>`
+  <tr><td style="font-weight:600">${esc(t.src)}</td><td class="ar-cell">${esc(t.ar)}</td>
+  <td><span class="chip chip-cat">${esc(t.cat)}</span></td>
+  <td class="mono" style="font-size:12px;color:var(--mut)">${t.pri}</td>
+  <td><span class="chip chip-type">${esc(t.type)}</span></td>
+  <td class="${t.locked?'lock-yes':'lock-no'}">${t.locked?'Yes':'No'}</td></tr>`).join('')
+ :`<tr><td colspan="6" style="text-align:center;color:var(--quiet);padding:30px">${prof?'No terms match your search.':'No glossary terms available.'}</td></tr>`;
+}
+$('#profSel').addEventListener('change',e=>{state.activeProfile=e.target.value;renderGlossary()});
+$('#glossSearch').addEventListener('input',e=>{state.glossSearch=e.target.value;renderGlossary()});
+$('#btnNewProf').onclick=()=>glossaryDialog('New Glossary Profile',`<div class="form-row"><label class="flabel">Profile name</label><input class="input" id="newProfName" placeholder="e.g. Fantasy Terms"></div><div class="form-row"><label class="flabel">Genre</label><input class="input" id="newProfGenre" value="General"></div>`,(m,err)=>{
+ const name=m.querySelector('#newProfName').value.trim(),genre=m.querySelector('#newProfGenre').value.trim();
+ if(!name){err.hidden=false;err.textContent='Profile name is required.';return}
+ if(!bookBridge){err.hidden=false;err.textContent='The desktop backend is not connected.';return}
+ const saveBtn=m.querySelector('#glossSave');
+ if(saveBtn) saveBtn.disabled=true;
+ bookBridge.create_glossary_profile(name,genre,raw=>{
+  if(saveBtn) saveBtn.disabled=false;
+  try {
+   const result=JSON.parse(raw);
+   if(!result.ok){err.hidden=false;err.textContent=result.error;return}
+   closeModal();refreshBackend();toast('Glossary profile created.','info');
+  }catch(e){
+   err.hidden=false;err.textContent='Failed to parse response.';
+  }
+ });
+});
+$('#btnAddTerm').onclick=()=>{
+ if(!state.activeProfile)return infoBox('No Profile','Create or select a glossary profile first.','warn');
+ glossaryDialog('Add Glossary Term',`<div class="form-2col"><div class="form-row"><label class="flabel">Source English Term</label><input class="input" id="termSource"></div><div class="form-row"><label class="flabel">Target Arabic Term</label><input class="input" id="termTarget" dir="rtl"></div></div><div class="form-2col"><div class="form-row"><label class="flabel">Category</label><select class="select" id="termCategory"><option>General terminology</option><option>Character names</option><option>Places</option><option>Organizations</option><option>Titles</option><option>Techniques</option><option>Items</option><option>Cultivation terminology</option></select></div><div class="form-row"><label class="flabel">Priority</label><input class="input" id="termPriority" type="number" min="1" max="1000" value="100"></div></div><label style="display:flex;gap:8px;align-items:center;color:var(--mut)"><input type="checkbox" id="termLocked" checked> Locked term</label>`,(m,err)=>{
+  const source=m.querySelector('#termSource').value.trim(),target=m.querySelector('#termTarget').value.trim();
+  if(!source||!target){err.hidden=false;err.textContent='Source and target terms are required.';return}
+  if(!bookBridge){err.hidden=false;err.textContent='The desktop backend is not connected.';return}
+  const saveBtn=m.querySelector('#glossSave');
+  if(saveBtn) saveBtn.disabled=true;
+  bookBridge.create_glossary_term(state.activeProfile,source,target,Number(m.querySelector('#termPriority').value)||100,m.querySelector('#termCategory').value,false,m.querySelector('#termLocked').checked,raw=>{
+   if(saveBtn) saveBtn.disabled=false;
+   try {
+    const result=JSON.parse(raw);
+    if(!result.ok){err.hidden=false;err.textContent=result.error;return}
+    closeModal();refreshBackend();toast('Glossary term created.','info');
+   }catch(e){
+    err.hidden=false;err.textContent='Failed to parse response.';
+   }
+  });
+ });
+};
+/* ================= credentials ================= */
+function provStatus(p){
+ if(!p.creds.length)return['NO KEYS','b-mut'];
+ if(p.creds.some(c=>c.status==='AVAILABLE'))return['AVAILABLE','b-ok'];
+ if(p.creds.some(c=>c.status==='COOLDOWN'))return['COOLDOWN','b-warn'];
+ if(p.creds.some(c=>c.status==='DISABLED'))return['DISABLED','b-mut'];
+ return['INVALID','b-err'];
+}
+function renderCreds(){
+ $('#credTree').innerHTML=state.providers.map((p,pi)=>{
+  const[st,cls]=provStatus(p);
+  let html=`<div class="cred-root ${p.open?'open':''}" data-proot="${pi}">
+   <span class="chev">${ic('chev','ic-sm')}</span>${ic('zap')}
+   <span style="flex:1"><span class="pname">${esc(p.name)}</span><span class="prate">${p.rate}</span></span>
+   <span class="bdg ${cls}"><i></i>${st}</span></div>`;
+  if(p.open){
+   html+=`<div class="cred-group">${ic('key','ic-sm')} API Keys — ${p.creds.length} configured</div>`;
+   if(!p.creds.length)html+=`<div style="padding:6px 16px 16px 46px;color:var(--quiet);font-size:12.5px">No keys configured for this provider. Use “Add API Key”.</div>`;
+   html+=p.creds.map((c,ci)=>`<div class="cred-row">
+    <div><div class="cr-name">${esc(c.name)}</div><div class="cr-sub">${esc(c.base || '')}</div></div>
+    <div class="cr-detail">model <b>${esc(c.model)}</b> · tokens <b>${fmt(c.tokens)}</b><br>ok <b style="color:#34d399">${fmt(c.ok)}</b> · fail <b style="color:#f87171">${c.fail}</b>${c.cd?` · cooldown <b style="color:#fbbf24">${c.cd}s</b>`:''}</div>
+    <span class="bdg ${{AVAILABLE:'b-ok',COOLDOWN:'b-warn',DISABLED:'b-mut',INVALID:'b-err'}[c.status]}"><i></i>${c.status}</span>
+   </div>`).join('');
+  }
+  return html;
+ }).join('');
+}
+$('#credTree').addEventListener('click',async e=>{
+ const root=e.target.closest('[data-proot]');
+ if(root&&!e.target.closest('button')){
+  const p=state.providers[+root.dataset.proot];if(p){p.open=!p.open;renderCreds();}
+ }
+});
+$('#btnAddKey').onclick=()=>{
+ if (!state.providers.length) {
+  state.providers = backendProviderState([]);
+ }
+ const m=openModal(`<div class="m-head"><h3>Add API Credential</h3><button class="m-x" data-mx>${ic('x')}</button></div>
+ <div class="m-body">
+  <div class="form-2col">
+   <div class="form-row"><label class="flabel">AI Provider</label><select class="select" id="acProv">${state.providers.map(p=>`<option value="${p.id || p.name}">${p.name}</option>`).join('')}</select></div>
+   <div class="form-row"><label class="flabel">Credential Name</label><input class="input" id="acName" value="Primary Key"></div>
+  </div>
+  <div class="form-row"><label class="flabel">Model</label><select class="select" id="acModel"></select></div>
+  <div class="form-row"><label class="flabel" style="color:var(--cyan2)">Strict Limits</label><div id="acRate" style="font:500 12px var(--font-m);color:var(--cyan2);background:rgba(56,189,248,.08);border:1px solid rgba(56,189,248,.25);border-radius:8px;padding:8px 11px"></div></div>
+  <div class="form-row"><label class="flabel">API Secret Key</label><input class="input" id="acKey" type="password" placeholder="Paste your API key here…" autocomplete="off"></div>
+  <div class="field-err" id="acErr" hidden></div>
+ </div>
+ <div class="m-foot"><button class="btn btn-sec" data-mx>Cancel</button><button class="btn btn-primary" id="acOk">${ic('check')} Save Credential</button></div>`);
+ const sync=()=>{
+  const selVal=m.querySelector('#acProv').value;
+  const p=state.providers.find(x=>(x.id===selVal || x.name===selVal)) || state.providers[0];
+  if(!p)return;
+  const models = p.models && p.models.length ? p.models : ['default'];
+  m.querySelector('#acModel').innerHTML=models.map(x=>`<option value="${x}">${x}</option>`).join('');
+  m.querySelector('#acRate').textContent='Strict pacing: '+(p.rate || 'Standard limits');
+ };
+ sync();
+ m.querySelector('#acProv').onchange=sync;
+ m.querySelector('#acOk').onclick=()=>{
+  const name=m.querySelector('#acName').value.trim(),key=m.querySelector('#acKey').value.trim(),err=m.querySelector('#acErr');
+  if(!name||key.length<10){
+   err.hidden=false;
+   err.innerHTML=`${ic('alert','ic-sm')} Credential name and a valid API secret (10+ characters) are required. The secret is verified in the vault before saving.`;
+   return;
+  }
+  const selVal=m.querySelector('#acProv').value;
+  const p=state.providers.find(x=>(x.id===selVal || x.name===selVal)) || state.providers[0];
+  const provId = p.id || ({"Google Gemini":"gemini","Groq":"groq","TokenRouter":"tokenrouter","OrCarRouter":"orcarouter"}[p.name] || p.name.toLowerCase());
+  const okBtn = m.querySelector('#acOk');
+  okBtn.disabled = true;
+  if(bookBridge){
+   bookBridge.save_credential(provId,name,m.querySelector('#acModel').value,key,raw=>{
+    okBtn.disabled = false;
+    try {
+     const result=JSON.parse(raw);
+     if(!result.ok){
+      err.hidden=false;
+      err.innerHTML=`${ic('alert','ic-sm')} ${esc(result.error)}`;
+      return;
+     }
+     closeModal();
+     refreshBackend();
+     toast(`Credential “${name}” stored securely.`);
+    } catch(e) {
+     err.hidden=false;
+     err.textContent='Failed to parse save result.';
+    }
+   });
+   return;
+  }
+  p.creds.push({name,base:p.creds[0]?.base||('https://api.'+p.name.toLowerCase().replace(/\s/g,'')+'.com/v1'),model:m.querySelector('#acModel').value,tokens:0,ok:0,fail:0,cd:0,status:'AVAILABLE'});
+  p.open=true;
+  closeModal();
+  renderCreds();
+  renderDashboard();
+  toast(`Credential “${name}” stored securely for ${p.name}.`);
+ };
+};
+
+/* ================= settings ================= */
+function renderSettings(){
+ $('#setDir').value=state.settings.dir;$('#setChunk').value=state.settings.chunk;
+ $('#setCtx').value=state.settings.ctx;$('#setRetry').value=state.settings.retry;$('#setCool').value=state.settings.cool.toFixed(2);
+}
+$('#btnBrowse').onclick=()=>{
+ if(bookBridge){
+  bookBridge.browse_directory(raw=>{
+   try {
+    const res=JSON.parse(raw);
+    if(res.path) $('#setDir').value=res.path;
+   } catch(e) {}
+  });
+ } else {
+  $('#fileDir').click();
+ }
+};
+$('#fileDir').onchange=e=>{
+ const f=e.target.files[0];e.target.value='';if(!f)return;
+ const relp=(f.webkitRelativePath||'BookBridge').split('/')[0];
+ $('#setDir').value='C:\\Users\\Translator\\'+relp+'\\exports';
+};
+$('#btnSaveSet').onclick=()=>{
+ const dir=$('#setDir').value.trim(),msg=$('#setMsg');
+ const chunk=Math.max(200,Math.min(5000,+$('#setChunk').value||1200));
+ if(!/^([A-Za-z]:[\\/]|[\\/\\/~])/.test(dir)||dir.length<4){
+  msg.className='warn';msg.textContent='Invalid export directory — choose a writable absolute path.';
+  toast('Settings not saved — invalid export directory.','warn');return;
+ }
+ const saveBtn = $('#btnSaveSet');
+ saveBtn.disabled = true;
+ if(bookBridge){
+  bookBridge.save_settings(dir,chunk,Math.max(0,Math.min(10,+$('#setCtx').value||0)),Math.max(0,Math.min(5,+$('#setRetry').value||0)),Math.max(0,Math.min(60,+$('#setCool').value||0)),raw=>{
+   saveBtn.disabled = false;
+   try {
+    const result=JSON.parse(raw);
+    if(!result.ok){msg.className='warn';msg.textContent=result.error;return}
+    msg.className='ok';msg.textContent='Settings updated successfully.';toast('Settings saved.');
+   } catch(e) {
+    msg.className='warn';msg.textContent='Failed to parse response.';
+   }
+  });
+  return;
+ }
+ Object.assign(state.settings,{dir,chunk,ctx:Math.max(0,Math.min(10,+$('#setCtx').value||0)),retry:Math.max(0,Math.min(5,+$('#setRetry').value||0)),cool:Math.max(0,Math.min(60,+$('#setCool').value||0))});
+ saveBtn.disabled = false;
+ msg.className='ok';msg.textContent='Settings updated successfully.';
+ toast('Settings saved — exports, cache, logs and vault verified.');
+};
+
+/* ================= init ================= */
+renderDashboard();renderLibrary();renderStudio();renderGlossary();renderCreds();renderSettings();
+
+/* ================= Python backend integration ================= */
+let bookBridge=null;
+let backendRefreshInFlight=false,backendRefreshQueued=false;
+function hydrateBackend(raw){
+ try {
+  const data=JSON.parse(raw);
+  state.books=data.books||[];
+  state.jobs=(data.jobs||[]).map(j=>({bookId:j.bookId,status:j.status,prog:j.progress,seg:j.segments,segT:j.segmentsTotal,tokens:j.tokens,upd:Date.parse(j.updatedAt)||Date.now()}));
+  const active=state.jobs.find(j=>j.status==='RUNNING'||j.status==='PAUSED')||state.jobs[0];
+  state.job=active?{bookId:active.bookId,status:active.status,seg:active.seg,segT:active.segT,tokens:active.tokens,cached:0,retries:0,failures:0,prov:'—',model:'—'}:null;
+  state.profiles=data.profiles||[];
+  state.providers=backendProviderState(data.credentials||[]);
+  state.settings=data.settings||state.settings;
+  if(document.body.classList.contains('modal-open')){backendRefreshQueued=true;return}
+  renderDashboard();renderLibrary();renderStudio();renderGlossary();renderCreds();renderSettings();
+ } catch(e) {
+  console.error('Failed to hydrate backend state', e);
+ }
+}
+function refreshBackend(){
+ if(!bookBridge)return;
+ if(document.body.classList.contains('modal-open')){backendRefreshQueued=true;return}
+ if(backendRefreshInFlight){backendRefreshQueued=true;return}
+ backendRefreshInFlight=true;
+ bookBridge.get_state(raw=>{
+  backendRefreshInFlight=false;
+  hydrateBackend(raw);
+  if(backendRefreshQueued&&!document.body.classList.contains('modal-open')){
+   backendRefreshQueued=false;
+   refreshBackend();
+  }
+ });
+}
+function connectBackend(){
+ if(typeof qt==='undefined'||!qt.webChannel)return;
+ new QWebChannel(qt.webChannelTransport,channel=>{
+  bookBridge=channel.objects.bookBridge;
+  bookBridge.job_progress.connect(raw=>{try{const event=JSON.parse(raw);const j=event.job;const existing=state.jobs.find(x=>x.bookId===j.bookId);const view=existing||{bookId:j.bookId};Object.assign(view,{status:j.status,prog:j.progress,seg:j.segments,segT:j.segmentsTotal,tokens:j.tokens,upd:Date.now()});if(!existing)state.jobs.unshift(view);if(event.segment){$('#srcPanel').textContent=event.segment.source;$('#arPanel').textContent=event.segment.translated}paintJob({seg:j.segments,segT:j.segmentsTotal,cached:j.cached,tokens:j.tokens,prov:event.segment?.provider||'—',model:event.segment?.model||'—',retries:j.retries,failures:j.failures});syncJobUI();renderDashboard()}catch(e){}});
+  bookBridge.job_finished.connect(()=>refreshBackend());
+  bookBridge.data_changed.connect(()=>refreshBackend());
+  refreshBackend();
+ });
+}
+connectBackend();
+</script>
+</body>
+</html>

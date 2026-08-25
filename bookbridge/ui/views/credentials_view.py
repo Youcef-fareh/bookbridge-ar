@@ -131,6 +131,8 @@ class CredentialDialog(QDialog):
                 QMessageBox.information(self, "Success", "API Key is VALID and connected!")
             else:
                 QMessageBox.warning(self, "Invalid Key", "Failed to connect. Please verify your API key.")
+        except Exception as ex:
+            QMessageBox.critical(self, "Validation Error", f"Failed to test API key:\n{str(ex)}")
         finally:
             loop.close()
 

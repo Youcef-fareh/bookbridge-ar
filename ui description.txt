@@ -1,0 +1,593 @@
+BOOKBRIDGE UI DESCRIPTION
+==========================
+
+Document purpose
+----------------
+This document describes the complete visual and frontend experience for BookBridge, a local-first AI book translation desktop application. It is written for implementation and design review. The product uses PySide6 and is organized as one desktop window with a persistent left navigation sidebar and a stacked content area containing six main pages:
+
+1. Dashboard & Overview
+2. Book Library & Inspector
+3. Translation Studio & Monitor
+4. Glossary & Terminology Rules
+5. API Credentials & Health Monitor
+6. Application Settings & Paths
+
+The interface is designed for translators, editors, and technical users who need to import books, configure translation rules, run long translation jobs, inspect progress, and export EPUB or PDF files.
+
+1. Overall visual direction
+---------------------------
+BookBridge should feel like a serious translation workstation: calm, technical, focused, and trustworthy. The interface is dark to reduce glare during long editing sessions, while indigo, cyan, green, amber, and red provide clear operational status.
+
+The visual language is:
+- Dark desktop application, not a marketing website.
+- Dense but readable information layout.
+- Clear hierarchy between navigation, page headers, configuration surfaces, data tables, and live status.
+- Consistent card containers for genuinely framed tools and data panels.
+- Strong distinction between primary actions, secondary actions, destructive actions, and successful completion actions.
+- English interface labels with deliberate right-to-left Arabic presentation wherever translated text appears.
+- Local-first messaging: credentials and book data are treated as private local assets.
+
+Recommended desktop window
+--------------------------
+- Window title: "BookBridge - AI Book Translation".
+- Default maximum working size: approximately 1200 x 780 px or 90 percent of the available display.
+- Minimum practical content width: approximately 980 px so tables and side-by-side source/Arabic panels remain usable.
+- Persistent sidebar width: 220 px.
+- Main content fills the remaining width.
+- Main page padding: 24 px on all sides.
+- Standard vertical spacing: 16 to 20 px between major sections.
+- Standard card internal padding: 12 to 16 px.
+- Use splitters for panels that users may need to resize, especially book inspection and translation streams.
+
+2. Global layout and navigation
+-------------------------------
+The main window uses a horizontal layout:
+
+LEFT SIDEBAR
+- Fixed width of 220 px.
+- Background: #161922.
+- A subtle right border separates it from the content area.
+- Top brand block:
+  - "BookBridge" in white, 18 px, bold.
+  - "AI BOOK TRANSLATOR" beneath it in small uppercase indigo text, 11 px, semibold.
+- Navigation buttons are stacked vertically below the brand.
+- Each button is left aligned, 13 px, semibold, with approximately 10 px vertical padding and 16 px horizontal padding.
+- Current icons in the implementation are emoji-style symbols. For a polished production UI, use a consistent monochrome icon set instead: dashboard, books, globe, book-open, key, and settings.
+- Navigation items:
+  - Dashboard
+  - Book Library
+  - Translation Studio
+  - Glossary & Terms
+  - API Credentials
+  - Settings
+- Default navigation state is Dashboard.
+- Hover state: slightly lighter slate background and brighter text.
+- Active state: solid indigo background (#4f46e5) and white text.
+- Bottom metadata: "v1.0.0 - Local First" in muted small text.
+
+MAIN CONTENT AREA
+- Background: #0f1117.
+- Foreground text: #f1f5f9.
+- Each page owns its scrollable content region when content exceeds the window height.
+- Page headers use a consistent 22 px white bold heading.
+- Header actions sit on the right side of the same horizontal row.
+- Use full-width layouts for page sections; cards should frame a tool, table, alert, or status area rather than decorate the page.
+
+3. Typography system
+---------------------
+Current implementation uses a Segoe UI / Inter fallback stack. Keep the UI font highly legible and neutral. A recommended production stack is:
+- Primary UI font: "Segoe UI Variable" or "Segoe UI".
+- Fallback: "Inter", system sans-serif.
+- Arabic text: "Noto Sans Arabic" or "Segoe UI" with Arabic glyph support.
+
+Type scale:
+- Page title: 22 px, weight 800, white.
+- Brand title: 18 px, weight 700, white.
+- Card title: 15 px, weight 700, near-white.
+- Body and control text: 13 px.
+- Table headers: 12 px, weight 600.
+- Supporting labels and stat labels: 11 to 12 px, muted.
+- Large metric values: 24 px, weight 800, indigo.
+- Arabic translation content: 15 to 18 px where space permits, with comfortable line height and right alignment.
+
+Typography rules:
+- Never use all-caps for long instructional text; reserve uppercase for short labels and status values.
+- Keep line lengths reasonable in alerts and help text.
+- Use bold only for hierarchy or status emphasis.
+- Ensure Arabic fields have RTL layout direction, right alignment, and an Arabic-capable font.
+- Do not reveal secrets in any visible text.
+
+4. Color and component system
+-----------------------------
+Base colors:
+- Window background: #0f1117.
+- Sidebar and cards: #161922.
+- Statistic cards and input surfaces: #1a1e2b.
+- Table background: #13161f.
+- Hover surface: #1e2230.
+- Borders: #232736 and #282e42.
+- Primary indigo: #4f46e5 to #6366f1.
+- Focus indigo: #6366f1.
+- Cyan information: #38bdf8 / #06b6d4.
+- Success green: #10b981.
+- Warning amber: #f59e0b.
+- Danger red: #ef4444.
+- Main text: #f1f5f9.
+- Muted text: #94a3b8.
+- Quiet text: #64748b.
+
+Buttons:
+- Primary: indigo fill, white text, semibold, 8 px radius. Used for import, start, add, and save actions.
+- Secondary: dark slate fill, muted-white text, one-pixel border. Used for refresh, preview, browse, and management actions.
+- Success: green fill, white text. Used for exporting completed output.
+- Danger: red fill, white text. Used for delete and cancel operations.
+- Minimum height: 34 px.
+- Buttons should have a visible disabled state with reduced contrast and no misleading hover effect.
+- Provide keyboard focus indication with a clear indigo outline or border.
+
+Fields and tables:
+- Inputs use #1a1e2b, one-pixel #282e42 border, 8 px radius, 8 px vertical and 12 px horizontal padding.
+- Focused fields use indigo border and a slightly lighter background.
+- Tables use dark backgrounds, restrained gridlines, clear headers, row selection, and hidden vertical headers.
+- Alternating rows may be used in hierarchy monitors.
+- Keep destructive row actions at the far right.
+- Avoid truncating book titles or Arabic text without a tooltip or expandable area.
+
+Cards:
+- Background #161922.
+- Border #232736.
+- Radius 8 to 12 px.
+- Cards contain meaningful grouped content: statistics, actions, forms, tables, alerts, or live output.
+- Avoid placing a card inside another card unless the inner element is a clearly separate data object.
+
+Status badges:
+- Success badge: translucent green background, green text, green border.
+- Warning badge: translucent amber background, amber text, amber border.
+- Danger badge: translucent red background, red text, red border.
+- Status labels should be short: AVAILABLE, RUNNING, PAUSED, FAILED, COMPLETED, NEEDS_REVIEW.
+
+5. Page: Dashboard & Overview
+-----------------------------
+Purpose
+Provide an at-a-glance operational view of the local library, translation activity, token usage, and credential health.
+
+Layout
+- Page padding: 24 px.
+- Header row:
+  - Left: "Dashboard & Overview".
+  - Right: Secondary "Refresh" button.
+- Four statistic cards in one row on wide screens, with a responsive two-by-two arrangement at narrower widths.
+- Quick Actions bar below the statistics.
+- Recent Translation Jobs table fills the remaining page height.
+
+Statistic cards
+1. Total Books
+   - Value: number of imported books.
+   - Supporting label: "Imported library".
+   - Visual emphasis: large indigo number.
+2. Active / Total Jobs
+   - Value: for example "2 / 15".
+   - Supporting label: "Translation queue".
+3. Tokens Processed
+   - Value: formatted with thousands separators.
+   - Supporting label: "Total AI tokens".
+4. Active API Keys
+   - Value: count of enabled healthy credentials.
+   - Supporting label: "Healthy credentials".
+
+Quick Actions
+- Framed horizontal action bar with label "Quick Actions:".
+- Primary action: "+ Import EPUB / PDF" navigates to Book Library.
+- Secondary actions: "Manage API Keys" and "Glossary & Terms".
+- Actions should remain readable when the window narrows; wrap or stack them rather than compressing text.
+
+Recent Translation Jobs
+- Card title: "Recent Translation Jobs".
+- Non-editable six-column table:
+  - Book Title
+  - Status
+  - Progress
+  - Segments
+  - Tokens
+  - Updated At
+- Book Title stretches to consume available space.
+- Other columns resize to content.
+- Status should be visually distinguishable with a badge or status color.
+- Progress should be concise, for example "71.0%"; a progress bar may be added if row height remains stable.
+- Empty state: explain that no translation jobs exist yet and provide a button to import a book.
+- Refresh reloads books, jobs, and enabled credentials without changing the current page.
+
+Dashboard states
+- Normal populated state.
+- Empty library state.
+- Active job state with RUNNING rows.
+- Warning state when no API credentials are configured.
+- Error state when local data cannot be loaded, with a retry action.
+
+6. Page: Book Library & Inspector
+---------------------------------
+Purpose
+Import EPUB or PDF books, review the imported library, and inspect parsed chapters and content blocks before translation.
+
+Header
+- Title: "Book Library & Inspector".
+- Right actions:
+  - Primary "+ Import EPUB".
+  - Secondary "+ Import PDF".
+- File dialogs filter to the appropriate file format.
+- A future enhancement may add a visible drag-and-drop drop zone for EPUB and PDF, as described in the master product prompt.
+
+Main split layout
+LEFT: Imported Books panel
+- Card title: "Imported Books".
+- Table columns:
+  - Title, stretching.
+  - Format, content-sized.
+  - Author, content-sized.
+- Select whole rows, not individual cells.
+- Hide the vertical header.
+- Selected row uses the standard slate selection color.
+- Below the table:
+  - Primary "Translate This Book" button, disabled until a book is selected.
+  - Danger "Delete" button, disabled until a book is selected.
+- Empty state should show "No books imported" and a direct import action.
+
+RIGHT: Book Structure Inspector panel
+- Default title: "Book Structure Inspector (Select a book)".
+- After selection, title should include the selected book title and useful counts such as chapter count and translatable block count.
+- Hierarchical tree columns:
+  - Chapter / Element
+  - Type
+  - Text Preview
+- Chapters are expandable and reveal parsed blocks such as headings, paragraphs, images, and other document elements.
+- Text Preview stretches to show useful content without making the tree excessively wide.
+- Arabic or translated previews should use RTL direction when applicable.
+- Empty selection state explains that a book must be selected.
+
+Import behavior and feedback
+- On successful import, show a concise success dialog with title, chapter count, and translatable block count.
+- On failure, show a critical error dialog with the format and actionable error message.
+- After import, refresh the table and select or visibly highlight the new book where possible.
+- Delete requires confirmation and should remove the selected book and related UI state.
+
+Visual priority
+- The selected book is the primary object on this page.
+- The inspector should feel like a document explorer, with indentation and expand/collapse affordances that are easy to scan.
+- Keep the two panels resizable through the horizontal splitter. Default split is approximately 35 percent library and 65 percent inspector.
+
+7. Page: Translation Studio & Monitor
+-------------------------------------
+Purpose
+Configure and run a translation job, preview a sample, schedule work, monitor live progress, pause or cancel safely, and export the completed book.
+
+Page header
+- Title: "Translation Studio & Monitor".
+- The page should make the current book and job state immediately obvious.
+- When no book is selected, show a clear empty configuration state and disable actions that require a book.
+
+Configuration card
+Use a four-column grid with aligned labels and fields.
+
+Row 1:
+- "Book to Translate:" combo box.
+  - Options show book title and source format, for example "Novel Name (EPUB)".
+- "Output Format:" combo box.
+  - EPUB, PDF.
+
+Row 2:
+- "Translation Style:" combo box populated from style presets.
+- "Glossary Profile:" combo box.
+  - Include "None (No glossary rules)".
+  - Other options include profile name, genre, and term count.
+
+Row 3:
+- "Provider Strategy:" combo box.
+  - Auto Failover (All Available Keys).
+  - Prefer Gemini.
+  - Prefer Groq.
+  - Prefer TokenRouter.
+  - Prefer OrCarRouter.
+- The product prompt also calls for source language, target language, and model selection. These should be added to the visible setup surface if the backend exposes them; default source is English and target is Arabic.
+
+Action row:
+- Secondary "Translate Sample (Preview)".
+- Primary "Start Full Translation".
+- Secondary "Pause", disabled until a job is running.
+- Danger "Cancel", disabled until a job is running or scheduled.
+- Success "Export Output Book", disabled until a job completes.
+
+Scheduling row:
+- Checkbox: "Schedule translation".
+- Date/time picker, disabled until scheduling is enabled.
+- Checkbox: "Auto-export to configured output folder", enabled only in schedule mode and checked by default.
+- Scheduled state must show the exact planned date and time in the progress status area.
+
+Progress monitor card
+- Status headline starts as "Ready to start translation.".
+- Large horizontal progress bar, 0 to 100 percent, with indigo-to-cyan progress fill.
+- Progress text is centered and readable against the bar.
+- Beneath the bar, show a compact metric row:
+  - Segments: completed / total.
+  - Cached: number of reused translation segments.
+  - Tokens: total tokens used.
+  - Active Provider: provider and model currently processing.
+- Include retries and failures in this row or in an expandable job details region, because the master prompt explicitly requires them.
+- When a job is resumed, retain the existing progress and label the action "Resume Translation".
+- When complete, status reads "Translation Complete! Ready to export." and Export becomes enabled.
+- When paused, status reads "Job Paused.".
+- When cancelled or failed, use warning or danger styling and preserve the explanation.
+
+Live segment stream
+- Two equal-width panels separated by a horizontal splitter.
+- Left card title: "Live Source Segment (English):".
+- Right card title: "Live Translated Output (Arabic RTL):".
+- Both use read-only multiline text areas with dark inset surfaces.
+- Source text is left-to-right.
+- Arabic output is right-to-left and right aligned.
+- Keep source and translation visible together so users can compare meaning and formatting.
+- Update the panels as each segment is processed, without resizing the layout.
+- Use a readable line height and preserve paragraph breaks.
+
+Preview dialog
+- Window title: "Sample Translation Preview (معاينة الترجمة)".
+- Approximate size: 750 x 500 px.
+- Intro text explains that the user is reviewing quality, glossary terminology, and Arabic formatting.
+- Two side-by-side read-only editors:
+  - Source English.
+  - Translated Arabic (RTL).
+- Primary or confirmation action: "Close Preview".
+- Preview must fail gracefully with a warning when no book or translatable chapter blocks are available.
+- Future enhancement: allow selecting Chapter 1, first five pages, or selected paragraphs before launching the preview.
+
+Job state behavior
+- Before start: configuration editable, run controls available.
+- Running: start disabled, pause and cancel enabled, export disabled, progress updating.
+- Paused: resume enabled, pause disabled, cancel remains available.
+- Failed: preserve error message, allow resume where the job model supports it.
+- Completed: export enabled, start label becomes "Retranslate Book".
+- Scheduled: start disabled, cancel enabled, date/time shown in status.
+- Never hide a failed job's reason behind a generic message.
+
+8. Page: Glossary & Terminology Rules
+-------------------------------------
+Purpose
+Manage translation terminology profiles and enforce consistent English-to-Arabic terms across a book.
+
+Header
+- Title: "Glossary & Terminology Rules".
+- Right actions:
+  - Secondary "+ Add Xianxia / Web Novel Preset".
+  - Secondary "Import (CSV/JSON)".
+  - Secondary "Export Profile".
+
+Profile control card
+- Horizontal card containing:
+  - Label "Active Profile:".
+  - Wide profile combo box showing profile name and term count.
+  - Secondary "+ New Profile".
+  - Primary "+ Add Term".
+- Selecting a profile immediately refreshes the term table.
+- If no profiles exist, automatically create the default Xianxia profile and select it.
+
+Terms table card
+- Search field at the top with placeholder "Search source or target terms...".
+- Filtering is live as the user types and checks both English source and Arabic target.
+- Seven columns:
+  - Source (English), stretching.
+  - Target (Arabic), stretching and right aligned.
+  - Category.
+  - Priority.
+  - Type.
+  - Locked.
+  - Action.
+- Hide vertical header.
+- Rightmost action is a red Delete button.
+- Use Arabic-capable font and RTL alignment in the target column.
+- Locked values display clearly as Yes or No. If enabled becomes part of the model, add an Enabled column or an inline toggle.
+
+Term dialog
+- Title: "Add New Glossary Term" or "Edit Term".
+- Approximate size: 450 x 350 px.
+- Form fields:
+  - Source English Term.
+  - Target Arabic Term, RTL.
+  - Category combo box.
+  - Priority spin box from 1 to 1000; higher priority matches first.
+  - Match Type combo box.
+  - Checkbox: Case Sensitive Matching.
+  - Checkbox: Locked (Strict placeholder protection), enabled by default for new terms.
+- OK and Cancel actions are grouped at the bottom.
+- Validate that source and target are both present before saving.
+- Show a warning for incomplete terms rather than silently ignoring the input.
+
+Import/export behavior
+- Import accepts JSON and CSV.
+- Export uses the active profile name as the suggested filename.
+- Success dialogs state the profile name and term count.
+- Errors identify the file format and preserve the original profile when import fails.
+- Deleting a term should be intentional; confirmation is recommended for production because terminology changes can affect future jobs.
+
+Visual priority
+- The active profile is a global context control and should remain visible above the table.
+- The table is the main workspace and should receive most of the page height.
+- Search should be fast, visually quiet, and always available.
+
+9. Page: API Credentials & Health Monitor
+-----------------------------------------
+Purpose
+Add, validate, monitor, and remove AI provider credentials without exposing secret values.
+
+Header
+- Title: "API Credentials & Health Monitor".
+- Right action: primary "+ Add API Key".
+
+Security information card
+- Full-width information card directly below the header.
+- Message communicates:
+  - API keys are stored exclusively in the OS keyring or encrypted local vault.
+  - Strict RPM, TPM, and RPD pacing prevents quota exhaustion.
+  - Providers may include Gemini, Groq, TokenRouter, and OrCarRouter.
+- Use a small lock icon from the shared icon set rather than relying on emoji.
+- Information text is muted and compact but must remain readable.
+
+Provider hierarchy monitor
+- Large tree table card with four columns:
+  - Provider / API Key.
+  - Status.
+  - Details.
+  - Action.
+- Providers appear as expandable root nodes.
+- Each provider root shows configured rate limits such as RPM, TPM, and RPD.
+- Child nodes show:
+  - API Key group and configured count.
+  - Individual credential name, never the secret.
+  - Base URL.
+  - Overall provider status.
+  - Supported models.
+- Individual credential details can show model, total tokens, success/failure counts, and cooldown seconds.
+- The far-right action is a red Delete button.
+- Expand providers that contain configured credentials by default.
+- Use status badges or strong status colors for AVAILABLE, cooldown, disabled, invalid, or unavailable states.
+
+Add API Credential dialog
+- Title: "Add API Credential".
+- Approximate size: 450 x 300 px.
+- Form fields:
+  - AI Provider combo box: Google Gemini, Groq, TokenRouter, OrCarRouter.
+  - Credential Name, default "Primary Key".
+  - Model combo box populated by provider.
+  - Strict Limits information label in cyan.
+  - API Secret Key password field with placeholder "Paste your API key here...".
+- Secondary action: "Test API Key Connection".
+- Dialog actions: OK and Cancel.
+- On provider change, update supported models and exact rate-limit text.
+- Test action must validate the key without displaying or logging the secret.
+- Save flow verifies both secure storage and retrieval. If verification fails, remove metadata that points to an unsaved secret and show a clear error.
+- Delete requires confirmation and removes both metadata and secure secret.
+
+Security requirements
+- Never show full API keys in tables, dialogs, logs, tooltips, or error messages.
+- Never store secret values in ordinary application settings.
+- Ensure secure-vault directory errors produce actionable text without exposing secrets.
+- Make the security card visually prominent but not alarming.
+
+10. Page: Application Settings & Paths
+--------------------------------------
+Purpose
+Control local output paths and translation pipeline tuning values.
+
+Layout
+- Page title: "Application Settings & Paths" at the top left.
+- One large settings card below the title.
+- Form labels on the left and controls on the right using a consistent two-column form layout.
+- Save button below the card, using the primary indigo style.
+- Remaining vertical space is intentionally empty so the form is easy to scan.
+
+Settings form
+1. Default Export Directory
+   - Editable path field.
+   - Secondary "Browse..." button opens a directory picker.
+2. Max Segment Characters (Chunk size)
+   - Spin box, range 200 to 5000.
+3. Context Window (Surrounding Blocks)
+   - Spin box, range 0 to 10.
+4. Max Validation Retries
+   - Spin box, range 0 to 5.
+5. Additional Normal Request Cooldown (seconds)
+   - Decimal spin box, range 0.00 to 60.00.
+   - Step 0.05, two decimal places.
+
+Interaction
+- Primary "Save Settings" validates the export directory before persisting.
+- On success, show "Settings updated successfully.".
+- On invalid directory, show a warning and keep the user's edits visible.
+- On filesystem failure, show a critical error with the reason.
+- Save should ensure required local directories exist, including exports, cache, logs, and secure vault storage.
+
+Visual priority
+- This page is utilitarian and should avoid decorative visuals.
+- Group related pipeline values with subtle helper text if needed.
+- Keep labels fully visible at the minimum supported width.
+
+11. Shared dialogs, notifications, and states
+---------------------------------------------
+Dialogs
+- Use native Qt dialogs where they provide familiar file selection or confirmation behavior.
+- Keep dialog titles specific and action-oriented.
+- Use consistent button order and keyboard behavior.
+- Avoid stacking multiple dialogs for one event.
+
+Notifications
+- Success: green or neutral success messaging with the result and relevant count.
+- Warning: amber styling for missing selection, invalid schedule, missing key, or incomplete terms.
+- Error: red or critical styling with a concise explanation and recovery step.
+- Long-running operations should update the page status rather than showing repeated modal dialogs.
+
+Empty states
+Every major table or panel should have an intentional empty state:
+- Dashboard: no books or jobs.
+- Library: no imported books.
+- Inspector: no selected book.
+- Translation: no selected book.
+- Glossary: no terms in active profile.
+- Credentials: no keys for a provider.
+- Settings: values always show current defaults.
+
+Loading states
+- Disable actions that cannot safely run while data is loading.
+- Keep layout dimensions stable while content changes.
+- Use a compact busy indicator or status label for API validation and translation startup.
+
+Error handling
+- Errors must identify the operation: import, preview, translation, export, credential validation, glossary import, or settings save.
+- Preserve user-entered values when possible.
+- Do not silently fall back from Arabic RTL to LTR.
+- Never expose API secrets, local encryption material, or unnecessary stack traces.
+
+12. Accessibility and interaction quality
+-----------------------------------------
+- All navigation and buttons must be keyboard reachable.
+- Active page and focused controls need visible contrast.
+- Do not communicate status by color alone; include text labels.
+- Ensure disabled controls explain their dependency through nearby state text or tooltips.
+- Tables support row selection and logical keyboard navigation.
+- Tree items support expand/collapse with keyboard controls.
+- Arabic text areas use correct RTL direction and preserve cursor behavior.
+- Use tooltips for icon-only buttons, especially refresh, browse, expand, delete, and export if icons replace text.
+- Keep minimum clickable height around 34 px.
+- Respect system font scaling where possible.
+- Avoid text clipping in buttons, table headers, alerts, and Arabic content.
+
+13. Responsive desktop behavior
+--------------------------------
+This is a desktop application, but it must remain usable when resized.
+
+At wide widths:
+- Keep the 220 px sidebar.
+- Use four dashboard statistic cards in one row.
+- Use side-by-side source and Arabic translation panels.
+- Let primary tables stretch into available width.
+
+At narrower widths:
+- Dashboard cards wrap into two rows.
+- Header actions wrap to a second line without shrinking text below 12 px.
+- Translation configuration fields can move from four columns to two columns.
+- Source and Arabic stream panels may stack vertically if side-by-side text becomes too narrow.
+- Library and inspector splitter remains usable with a minimum width for each pane.
+- Glossary source and target columns remain dominant while metadata columns stay content-sized.
+- Credentials details may wrap or use a horizontally scrollable table, but secret values remain hidden.
+
+14. Frontend implementation checklist
+-------------------------------------
+- Use one shared QSS theme for colors, typography, controls, tables, progress bars, and statuses.
+- Keep page views independent and let MainWindow own navigation and refresh dispatch.
+- Keep repository and translation engine logic out of visual components except for narrowly scoped event handlers.
+- Use QSplitter for resizable inspection and comparison layouts.
+- Use QStackedWidget for page navigation.
+- Refresh data whenever a page is entered, without losing user selection unnecessarily.
+- Keep disabled states synchronized with job, book, credential, and profile state.
+- Preserve existing public labels where they are already used by the application and tests.
+- Add tests for empty states, job state transitions, RTL content presentation, import failures, credential verification failures, and settings validation.
+- Validate the interface at the default 1200 x 780 size and at a narrower desktop size before release.
+
+End of UI description

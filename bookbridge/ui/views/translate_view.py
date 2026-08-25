@@ -390,6 +390,8 @@ class TranslateView(QWidget):
                 dlg.exec()
             else:
                 QMessageBox.critical(self, "Preview Failed", f"Translation error:\n{result.error}")
+        except Exception as ex:
+            QMessageBox.critical(self, "Preview Failed", f"Translation preview failed:\n{str(ex)}")
         finally:
             loop.close()
 

@@ -3,6 +3,7 @@
 import logging
 import sys
 import os
+from PySide6.QtCore import Qt, QCoreApplication
 from PySide6.QtWidgets import QApplication
 from bookbridge.config.settings import settings
 from bookbridge.database.migrations import run_migrations
@@ -24,9 +25,8 @@ def main():
     settings.ensure_directories()
     logger.info(f"Data directory: {settings.data_dir}")
 
-    # Configure Qt to be more robust with display servers
-    # Increase buffer and event handling timeouts to prevent Wayland crashes during PDF parsing
-    os.environ.setdefault("QT_QPA_EGLFS_ALWAYS_OPENGL", "1")
+    # Configure QtWebEngine OpenGL context sharing
+    QCoreApplication.setAttribute(Qt.AA_ShareOpenGLContexts)
     os.environ.setdefault("QT_LOGGING_RULES", "qt.qpa.wayland=false")
 
     # Apply database migrations
