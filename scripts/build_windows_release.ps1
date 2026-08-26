@@ -20,6 +20,7 @@ if (Test-Path "$Root\icon.ico") {
       --icon "$Root\icon.ico" `
             --manifest "$Root\installer\BookBridge.manifest" `
       --add-data "README.md;." `
+            --add-data "bookbridge.html;." `
       --add-data "sample_data;sample_data" `
       --distpath "$Root\dist\app" `
       "$Root\bookbridge\app.py"
@@ -27,6 +28,7 @@ if (Test-Path "$Root\icon.ico") {
     & pyinstaller --noconfirm --clean --onefile --windowed --name BookBridge `
             --manifest "$Root\installer\BookBridge.manifest" `
       --add-data "README.md;." `
+        --add-data "bookbridge.html;." `
       --add-data "sample_data;sample_data" `
       --distpath "$Root\dist\app" `
       "$Root\bookbridge\app.py"
