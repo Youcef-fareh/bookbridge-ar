@@ -38,6 +38,7 @@ jobs:
               --icon .\icon.ico `
               --manifest .\installer\BookBridge.manifest `
               --add-data "README.md;." `
+              --add-data "bookbridge.html;." `
               --add-data "sample_data;sample_data" `
               --distpath .\dist\app `
               .\bookbridge\app.py
@@ -45,6 +46,7 @@ jobs:
             pyinstaller --noconfirm --clean --onefile --windowed --name BookBridge `
               --manifest .\installer\BookBridge.manifest `
               --add-data "README.md;." `
+              --add-data "bookbridge.html;." `
               --add-data "sample_data;sample_data" `
               --distpath .\dist\app `
               .\bookbridge\app.py
