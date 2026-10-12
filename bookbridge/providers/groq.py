@@ -17,11 +17,12 @@ class GroqProvider(TranslationProvider):
 
     def get_supported_models(self) -> List[str]:
         return [
+            "qwen/qwen3.6-27b",
+            "openai/gpt-oss-20b",
+            "openai/gpt-oss-120b",
             "llama-3.3-70b-versatile",
             "llama-3.1-70b-versatile",
-            "llama-3.1-8b-instant",
             "meta-llama/llama-4-scout-17b-16e-instruct",
-            "mixtral-8x7b-32768",
         ]
 
     def resolve_model_name(self, model_name: str | None) -> str:
@@ -63,7 +64,9 @@ class GroqProvider(TranslationProvider):
             "1. Output ONLY the translated Arabic text.\n"
             "2. Preserve all protected tokens like <NB_TERM_001>, <NB_TERM_002>, etc. exactly as they appear.\n"
             "3. Maintain original paragraph breaks and line spacing.\n"
-            "4. Do not omit or summarize any text."
+            "4. Do not omit or summarize any text.\n"
+            "5. Never include introductions, explanations, notes, summaries, repetition, or conversation.\n"
+            "6. Translate the requested text exactly once and then stop."
         )
 
     def _build_user_prompt(self, text: str, context_before: str, context_after: str) -> str:

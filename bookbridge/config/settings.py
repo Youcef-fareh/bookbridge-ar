@@ -4,7 +4,7 @@ import os
 import logging
 import json
 from pathlib import Path
-from typing import Optional
+from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field, ConfigDict
 
 logger = logging.getLogger(__name__)
@@ -21,8 +21,8 @@ class AppSettings(BaseModel):
     log_level: str = "INFO"
     default_source_lang: str = "en"
     default_target_lang: str = "ar"
-    default_gemini_model: str = "gemini-2.5-flash"
-    default_groq_model: str = "llama-3.3-70b-versatile"
+    default_gemini_model: str = "gemini-3.5-flash-lite"
+    default_groq_model: str = "qwen/qwen3.6-27b"
     default_orcarouter_model: str = "qwen/qwen3.8-27b-free"
     default_tokenrouter_model: str = "deepseek/deepseek-v4-pro-0813-free"
     max_segment_chars: int = 1200
@@ -31,6 +31,7 @@ class AppSettings(BaseModel):
     request_timeout_seconds: float = 35.0
     max_validation_retries: int = 2
     normal_request_cooldown_seconds: float = 0.05
+    provider_configs: List[Dict[str, Any]] = Field(default_factory=list)
 
     @property
     def db_path(self) -> Path:
@@ -60,6 +61,7 @@ class AppSettings(BaseModel):
                 "context_window_blocks",
                 "max_validation_retries",
                 "normal_request_cooldown_seconds",
+                "provider_configs",
             ):
                 if field_name in values:
                     setattr(self, field_name, values[field_name])
@@ -75,6 +77,7 @@ class AppSettings(BaseModel):
             "context_window_blocks": self.context_window_blocks,
             "max_validation_retries": self.max_validation_retries,
             "normal_request_cooldown_seconds": self.normal_request_cooldown_seconds,
+            "provider_configs": self.provider_configs,
         }
         self.settings_path.write_text(json.dumps(values, indent=2), encoding="utf-8")
 

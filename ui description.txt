@@ -156,7 +156,7 @@ Layout
 - Header row:
   - Left: "Dashboard & Overview".
   - Right: Secondary "Refresh" button.
-- Four statistic cards in one row on wide screens, with a responsive two-by-two arrangement at narrower widths.
+- Four statistic cards in one row for the desktop application.
 - Quick Actions bar below the statistics.
 - Recent Translation Jobs table fills the remaining page height.
 
@@ -558,11 +558,11 @@ Error handling
 - Respect system font scaling where possible.
 - Avoid text clipping in buttons, table headers, alerts, and Arabic content.
 
-13. Responsive desktop behavior
+13. Desktop window behavior
 --------------------------------
-This is a desktop application, but it must remain usable when resized.
+This is a desktop application with a fixed desktop-oriented layout.
 
-At wide widths:
+Use the desktop layout:
 - Keep the 220 px sidebar.
 - Use four dashboard statistic cards in one row.
 - Use side-by-side source and Arabic translation panels.

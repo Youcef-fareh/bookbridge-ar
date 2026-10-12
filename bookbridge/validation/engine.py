@@ -10,7 +10,7 @@ class ValidationEngine:
         source_text: str,
         raw_translated_text: str,
         token_to_target: Dict[str, str],
-        max_length_ratio: float = 4.0,
+        max_length_ratio: float = 8.0,
         min_length_ratio: float = 0.15,
     ) -> Tuple[bool, List[str]]:
         """
@@ -46,6 +46,10 @@ class ValidationEngine:
                 errors.append(f"Suspiciously short translation (ratio {ratio:.2f} < {min_length_ratio})")
             elif ratio > max_length_ratio:
                 errors.append(f"Suspiciously long translation (ratio {ratio:.2f} > {max_length_ratio})")
+
+            translated_words = re.findall(r"\w+", raw_translated_text.lower())
+            if len(translated_words) > 80 and len(set(translated_words)) / len(translated_words) < 0.08:
+                errors.append("Suspiciously repetitive translation output.")
 
         # 4. Number Preservation Check
         # Extract standalone numbers from source

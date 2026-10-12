@@ -29,15 +29,15 @@ class RateLimiter:
         # Per-credential sliding window for last 60 seconds: deque of (timestamp_seconds, tokens_count)
         self._sliding_windows: Dict[str, Deque[Tuple[float, int]]] = {}
         self._last_request_time: Dict[str, float] = {}
-        self._locks: Dict[Tuple[asyncio.AbstractEventLoop, str], asyncio.Lock] = {}
+        self._locks: Dict[str, asyncio.Lock] = {}  # keyed by cred_id only — no loop reference
         self._daily_counts: Dict[str, Tuple[float, int]] = {}  # cred_id -> (cache_timestamp, count)
 
     def _get_lock(self, cred_id: str) -> asyncio.Lock:
-        loop = asyncio.get_running_loop()
-        key = (loop, cred_id)
-        if key not in self._locks:
-            self._locks[key] = asyncio.Lock()
-        return self._locks[key]
+        """Return a per-credential async lock. Keyed by cred_id only to avoid holding
+        stale references to closed event loops."""
+        if cred_id not in self._locks:
+            self._locks[cred_id] = asyncio.Lock()
+        return self._locks[cred_id]
 
     def _clean_sliding_window(self, cred_id: str, now: float) -> Deque[Tuple[float, int]]:
         if cred_id not in self._sliding_windows:
@@ -141,35 +141,25 @@ class RateLimiter:
         cred: ProviderCredentialMetadata,
         estimated_tokens: int = 500,
         max_wait_seconds: float = 65.0,
+        cancel_check=None,
     ) -> bool:
-        """
-        Acquires permission to send a request, waiting proactively if needed to stay strictly
-        under RPM, TPM, and RPD limits.
-        """
+        """Wait only for the user-configured delay between request starts."""
         lock = self._get_lock(cred.id)
         async with lock:
             total_waited = 0.0
             while total_waited <= max_wait_seconds:
-                can_go, wait_s, reason = self.check_capacity(cred, estimated_tokens)
-                if can_go:
-                    now = time.time()
+                if cancel_check and cancel_check():
+                    return False
+                now = time.time()
+                last_request = self._last_request_time.get(cred.id, 0.0)
+                wait_s = max(0.0, settings.normal_request_cooldown_seconds - (now - last_request))
+                if wait_s <= 0.0:
                     self._last_request_time[cred.id] = now
-                    # Record placeholder into sliding window
-                    window = self._clean_sliding_window(cred.id, now)
-                    window.append((now, estimated_tokens))
                     return True
 
-                if wait_s > max_wait_seconds:
-                    logger.warning(
-                        f"Credential '{cred.name}' ({cred.provider.value}) rate limit blocked: {reason} (needs {wait_s:.1f}s wait > {max_wait_seconds}s)."
-                    )
-                    return False
-
-                logger.info(
-                    f"Pacing '{cred.name}' ({cred.provider.value}): sleeping {wait_s:.2f}s to respect {reason}..."
-                )
-                await asyncio.sleep(wait_s)
-                total_waited += wait_s
+                sleep_for = min(wait_s, 0.25)
+                await asyncio.sleep(sleep_for)
+                total_waited += sleep_for
 
             return False
 

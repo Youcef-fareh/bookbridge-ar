@@ -64,6 +64,10 @@ htmlcov/
 *~
 .cursor/
 
+# Project planning documents
+implementation_plan.md
+bookBridge — AI Book Translation Desktop Application_ Master Development Prompt.md
+
 # Operating System Files
 .DS_Store
 Thumbs.db

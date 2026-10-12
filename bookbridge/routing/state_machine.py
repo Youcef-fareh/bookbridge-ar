@@ -63,7 +63,8 @@ class CredentialStateMachine:
             cred.cooldown_until = datetime.now(timezone.utc) + timedelta(seconds=30)
             logger.warning(f"Credential '{cred.name}' has 3 consecutive errors. Putting in 30s cooldown.")
         else:
-            cred.state = CredentialState.ERROR
+            cred.state = CredentialState.COOLDOWN
+            cred.cooldown_until = datetime.now(timezone.utc) + timedelta(seconds=10)
 
     @staticmethod
     def check_and_recover_cooldown(cred: ProviderCredentialMetadata) -> None:

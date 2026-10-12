@@ -178,3 +178,36 @@ def test_rate_limiter_rpd_daily_limit():
     assert "Daily limit (RPD)" in reason
 
 
+def test_router_preferred_provider_candidate_ordering():
+    cred_repo = CredentialRepository()
+    router = TranslationRouter(cred_repo)
+
+    cred_gem = ProviderCredentialMetadata(
+        id="order_gemini",
+        provider=ProviderType.GEMINI,
+        name="Gemini Key",
+    )
+    cred_groq = ProviderCredentialMetadata(
+        id="order_groq",
+        provider=ProviderType.GROQ,
+        name="Groq Key",
+    )
+    cred_custom = ProviderCredentialMetadata(
+        id="order_custom",
+        provider=ProviderType.CUSTOM,
+        name="Custom Key",
+        extra_config={"provider_id": "my_local_ollama"},
+    )
+    cred_repo.save_credential_metadata(cred_gem)
+    cred_repo.save_credential_metadata(cred_groq)
+    cred_repo.save_credential_metadata(cred_custom)
+
+    # 1. Prefer Groq
+    groq_first = router.get_candidate_credentials(preferred_provider=ProviderType.GROQ)
+    assert groq_first[0].id == "order_groq"
+
+    # 2. Prefer Custom Provider by string ID
+    custom_first = router.get_candidate_credentials(preferred_provider="my_local_ollama")
+    assert custom_first[0].id == "order_custom"
+
+

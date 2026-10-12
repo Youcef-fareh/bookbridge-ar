@@ -17,11 +17,9 @@ class GeminiProvider(TranslationProvider):
 
     def get_supported_models(self) -> List[str]:
         return [
+            "gemini-3.5-flash-lite",
+            "gemini-3.1-flash-lite",
             "gemini-2.5-flash",
-            "gemini-2.5-flash-lite",
-            "gemini-2.0-flash",
-            "gemini-1.5-flash",
-            "gemini-1.5-pro",
         ]
 
     def _build_system_instructions(
@@ -39,7 +37,9 @@ class GeminiProvider(TranslationProvider):
             "1. Output ONLY the translated text. Do NOT include markdown code blocks (like ```arabic), explanations, or notes.\n"
             "2. Preserve all protected tokens like <NB_TERM_001>, <NB_TERM_002>, etc. exactly as they appear.\n"
             "3. Maintain original paragraph breaks and line spacing.\n"
-            "4. Do not omit any sentence or dialogue."
+            "4. Do not omit any sentence or dialogue.\n"
+            "5. Never include introductions, explanations, notes, summaries, repetition, or conversation.\n"
+            "6. Translate the requested text exactly once and then stop."
         )
 
     def _build_user_prompt(self, text: str, context_before: str, context_after: str) -> str:

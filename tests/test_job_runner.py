@@ -246,3 +246,56 @@ async def test_job_runner_cancel_persists_cancelled_status():
     cancelled_job = job_repo.get_job(job.id)
     assert cancelled_job.status == JobStatus.CANCELLED
     assert cancelled_job.completed_segments == 1
+
+
+@pytest.mark.asyncio
+async def test_job_runner_respects_request_cooldown_setting():
+    import time
+    book_repo = BookRepository()
+    job_repo = JobRepository()
+    glossary_repo = GlossaryRepository()
+    cred_repo = CredentialRepository()
+
+    cred = ProviderCredentialMetadata(
+        id="cred_cooldown_test",
+        provider=ProviderType.MOCK,
+        name="Cooldown Mock Key",
+    )
+    cred_repo.save_credential_metadata(cred)
+    keyring_manager.save_secret(cred.id, "dummy_secret")
+
+    router = TranslationRouter(cred_repo)
+    router.register_provider(ProviderType.MOCK, MockProvider())
+    pipeline = TranslationPipeline(router=router)
+
+    book = Book(
+        metadata=BookMetadata(title="Cooldown Test Book", author="Tester"),
+        source_format="epub",
+        source_file_path="dummy.epub",
+    )
+    chapter = Chapter(book_id=book.id, title="Chapter 1", order_index=0)
+    chapter.blocks.extend(
+        [
+            Block(chapter_id=chapter.id, source_text="Paragraph 1.", order_index=0, type=BlockType.PARAGRAPH),
+            Block(chapter_id=chapter.id, source_text="Paragraph 2.", order_index=1, type=BlockType.PARAGRAPH),
+        ]
+    )
+    book.chapters.append(chapter)
+    book_repo.save_book(book)
+
+    job = TranslationJob(book_id=book.id, book_title=book.metadata.title)
+    job_repo.create_job(job)
+    runner = JobRunner(job_repo, book_repo, glossary_repo, pipeline)
+
+    orig_cool = settings.normal_request_cooldown_seconds
+    try:
+        settings.normal_request_cooldown_seconds = 0.15
+        start_time = time.time()
+        success = await runner.run_job(job.id)
+        elapsed = time.time() - start_time
+
+        assert success is True
+        # Since there are 2 segments and cooldown is 0.15s, elapsed time should be >= 0.15s
+        assert elapsed >= 0.14
+    finally:
+        settings.normal_request_cooldown_seconds = orig_cool

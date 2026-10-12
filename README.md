@@ -40,7 +40,7 @@ bookbridge is a desktop application designed for translating novels and books fr
 ## Download & Install
 
 ### Windows Installer
-Download the latest setup file from the GitHub Releases page and run the installer.
+Download the latest setup file from the GitHub Releases page and run the installer. The installer includes the Python runtime and application dependencies; the target PC does not need Python or an internet connection to install BookBridge.
 
 1. Open the latest release on GitHub.
 2. Download `BookBridge-Setup.exe`.
@@ -60,6 +60,8 @@ pip install -r requirements.txt
 python -m pytest -v tests/
 python -m bookbridge.app
 ```
+
+Run `python -m bookbridge.app` for the desktop application. Do not open `bookbridge.html` directly in a browser: that file is only the user interface, and book parsing/import is provided by the desktop backend.
 
 ---
 

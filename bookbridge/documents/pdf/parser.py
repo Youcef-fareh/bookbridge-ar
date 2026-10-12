@@ -2,7 +2,7 @@
 
 import logging
 from pathlib import Path
-import fitz  # PyMuPDF
+import pymupdf as fitz
 from bookbridge.config.constants import BlockType
 from bookbridge.documents.base import DocumentParser
 from bookbridge.models.book import (

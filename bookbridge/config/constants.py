@@ -52,6 +52,7 @@ class ProviderType(str, Enum):
     OPENAI = "openai"
     ANTHROPIC = "anthropic"
     OLLAMA = "ollama"
+    CUSTOM = "custom"
     MOCK = "mock"
 
 
@@ -90,8 +91,8 @@ TOKEN_SUFFIX = ">"
 TOKEN_PATTERN = r"<NB_TERM_(\d+)>"
 
 # Default Model Constants
-DEFAULT_GEMINI_MODEL = "gemini-2.5-flash"
-DEFAULT_GROQ_MODEL = "llama-3.3-70b-versatile"
+DEFAULT_GEMINI_MODEL = "gemini-3.5-flash-lite"
+DEFAULT_GROQ_MODEL = "qwen/qwen3.6-27b"
 DEFAULT_ORCAROUTER_MODEL = "qwen/qwen3.8-27b-free"
 DEFAULT_TOKENROUTER_MODEL = "deepseek/deepseek-v4-pro-0813-free"
 
@@ -141,6 +142,6 @@ PROVIDER_DEFAULT_LIMITS = {
 
 # Rate limit & Backoff Defaults
 DEFAULT_COOLDOWN_SECONDS = 60
-DEFAULT_MAX_RETRIES = 3
+DEFAULT_MAX_RETRIES = 1
 DEFAULT_SEGMENT_MAX_CHARS = 1200
 DEFAULT_CONTEXT_WINDOW_BLOCKS = 2

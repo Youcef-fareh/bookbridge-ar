@@ -36,7 +36,11 @@ class KeyringManager:
     @property
     def _cipher(self) -> Fernet:
         """Derive a consistent machine/user encryption key for fallback storage."""
-        user_entropy = f"{os.getlogin() if hasattr(os, 'getlogin') else 'user'}:{Path.home()}:BookBridgeSecretSalt"
+        try:
+            user = os.getlogin()
+        except Exception:
+            user = os.environ.get("USERNAME") or os.environ.get("USER") or "user"
+        user_entropy = f"{user}:{Path.home()}:BookBridgeSecretSalt"
         key_32 = hashlib.sha256(user_entropy.encode()).digest()
         b64_key = base64.urlsafe_b64encode(key_32)
         return Fernet(b64_key)

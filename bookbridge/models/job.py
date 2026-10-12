@@ -69,6 +69,7 @@ class TranslationResult(BaseModel):
     credential_id: str = ""
     tokens_used: int = 0
     cached: bool = False
+    cancelled: bool = False
     error: Optional[str] = None
     retryable: bool = False
     validation_errors: List[str] = Field(default_factory=list)

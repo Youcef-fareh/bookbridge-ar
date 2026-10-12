@@ -274,8 +274,6 @@ body.modal-open .main{
 .foot-bar .fl{display:flex;gap:8px;align-items:center}
 .foot-bar .ic{width:13px;height:13px;color:var(--green)}
 
-@media (max-width:1180px){.stat-grid{grid-template-columns:1fr 1fr}.cfg-grid{grid-template-columns:1fr 1fr}.stream-grid{grid-template-columns:1fr}.metric-row{grid-template-columns:repeat(3,1fr)}}
-@media (max-width:960px){.lib-split{grid-template-columns:1fr;height:auto}.sidebar{width:64px}.brand-txt,.nav-btn span,.side-foot span,.brand-sub{display:none}.nav-btn{justify-content:center;padding:11px}.set-row{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
@@ -392,7 +390,7 @@ body.modal-open .main{
       <div><label class="flabel">Output Format</label><select class="select" id="cfgOut"><option>EPUB</option><option>PDF</option></select></div>
       <div><label class="flabel">Translation Style</label><select class="select" id="cfgStyle"><option>Literary — Flowing Prose</option><option>Faithful — Close to Source</option><option>Xianxia — Genre Native</option><option>Fast Draft — Speed First</option></select></div>
       <div><label class="flabel">Glossary Profile</label><select class="select" id="cfgGloss"></select></div>
-      <div><label class="flabel">Provider Strategy</label><select class="select" id="cfgStrat"><option>Auto Failover (All Available Keys)</option><option>Prefer Gemini</option><option>Prefer Groq</option><option>Prefer TokenRouter</option><option>Prefer OrCarRouter</option></select></div>
+      <div><label class="flabel">Provider Strategy</label><select class="select" id="cfgStrat"></select></div>
       <div><label class="flabel">Source Language</label><select class="select" id="cfgSrc"><option>English</option></select></div>
       <div><label class="flabel">Target Language</label><select class="select" id="cfgTgt"><option>Arabic</option></select></div>
       <div><label class="flabel">Model</label><select class="select" id="cfgModel"></select></div>
@@ -448,10 +446,10 @@ body.modal-open .main{
 <section class="page" id="page-creds">
   <div class="page-head">
     <div><h1 class="page-title">API Credentials &amp; Health Monitor</h1><p class="page-sub">Add, validate and monitor provider credentials — secrets never leave the vault.</p></div>
-    <button class="btn btn-primary" id="btnAddKey"><svg class="ic"><use href="#i-plus"/></svg> Add API Key</button>
+    <div style="display:flex;gap:8px"><button class="btn btn-sec" id="btnAddProvider"><svg class="ic"><use href="#i-plus"/></svg> Add Provider</button><button class="btn btn-primary" id="btnAddKey"><svg class="ic"><use href="#i-plus"/></svg> Add API Key</button></div>
   </div>
   <div class="sec-card"><svg class="ic ic-lg"><use href="#i-lock"/></svg>
-    <p><b>Local-first security.</b> API keys are stored exclusively in the OS keyring / encrypted local vault. Strict <b>RPM · TPM · RPD</b> pacing prevents quota exhaustion. Providers: Gemini, Groq, TokenRouter, OrCarRouter. Full secrets are never displayed, logged or exported.</p>
+    <p><b>Local-first security.</b> API keys are stored exclusively in the OS keyring / encrypted local vault. Providers: Gemini, Groq, TokenRouter, OrCarRouter. Full secrets are never displayed, logged or exported.</p>
   </div>
   <div class="card" id="credTree"></div>
 </section>
@@ -499,14 +497,14 @@ if(themeToggle)themeToggle.onclick=()=>{const light=!document.body.classList.con
 const avatar=b=>b.cover?`<img class="bcover" src="${esc(b.cover)}" onerror="this.replaceWith(this.nextElementSibling)"><span class="bcover-ph" hidden>${esc((b.title||'?').trim()[0]||'?')}</span>`:`<span class="bcover-ph">${esc((b.title||'?').trim()[0]||'?')}</span>`;
 
 const DEFAULT_PROVIDERS = [
- { id: 'gemini', name: 'Google Gemini', models: ['gemini-1.5-pro', 'gemini-1.5-flash', 'gemini-2.0-flash'], rate: '15 RPM · 240,000 TPM · 500 RPD (Strict pacing)' },
- { id: 'groq', name: 'Groq', models: ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'mixtral-8x7b-32768'], rate: '30 RPM · 8,000 TPM (Strict token pacing) · 8,000 RPD' },
- { id: 'tokenrouter', name: 'TokenRouter', models: ['gpt-4o-mini', 'claude-3-5-sonnet', 'deepseek-v3'], rate: '20 RPM · 60,000 TPM · 1,000 RPD' },
- { id: 'orcarouter', name: 'OrCarRouter', models: ['deepseek-v3', 'qwen-2.5-72b-instruct'], rate: '20 RPM · 60,000 TPM · 1,000 RPD' }
+ { id: 'gemini', name: 'Google Gemini', models: ['gemini-3.5-flash-lite', 'gemini-3.1-flash-lite', 'gemini-2.5-flash', 'gemini-1.5-flash', 'gemini-1.5-pro'], rate: '15 RPM · 240,000 TPM · 500 RPD (Strict pacing)' },
+ { id: 'groq', name: 'Groq', models: ['qwen/qwen3.6-27b', 'openai/gpt-oss-20b', 'openai/gpt-oss-120b', 'llama-3.3-70b-versatile', 'llama-3.1-70b-versatile', 'llama-3.1-8b-instant', 'meta-llama/llama-4-scout-17b-16e-instruct'], rate: '30 RPM · 8,000 TPM (Strict token pacing) · 8,000 RPD' },
+ { id: 'tokenrouter', name: 'TokenRouter', models: ['deepseek/deepseek-v4-pro-0813-free', 'qwen/qwen3.8-max-free', 'deepseek/deepseek-r1-0528-free', 'qwen/qwen3.8-27b-free', 'meta-llama/llama-3.3-70b-instruct', 'gpt-4o-mini', 'claude-3-5-sonnet', 'deepseek-v3'], rate: '20 RPM · 60,000 TPM · 1,000 RPD' },
+ { id: 'orcarouter', name: 'OrCarRouter', models: ['qwen/qwen3.8-27b-free', 'qwen/qwen3-32b-free', 'deepseek/deepseek-r1-0528-free', 'meta-llama/llama-3.3-70b-instruct', 'deepseek-v3', 'qwen-2.5-72b-instruct'], rate: '20 RPM · 60,000 TPM · 1,000 RPD' }
 ];
 
-function backendProviderState(credentials){
- return DEFAULT_PROVIDERS.map(def => {
+function backendProviderState(credentials,customConfigs=[]){
+ return DEFAULT_PROVIDERS.concat((customConfigs||[]).map(c=>({id:c.id,name:c.name,models:c.models||[],rate:`${c.rate_limit_rpm} RPM · ${Number(c.rate_limit_tpm||0).toLocaleString()} TPM · ${c.rate_limit_rpd} RPD`,base:c.base_url,protocol:c.protocol,custom:true}))).map(def => {
   const rows = (credentials || []).filter(c => c.provider === def.id);
   return {
    id: def.id,
@@ -514,6 +512,7 @@ function backendProviderState(credentials){
    rate: rows.length ? `${rows[0].rpm} RPM · ${rows[0].tpm.toLocaleString()} TPM · ${rows[0].rpd.toLocaleString()} RPD` : def.rate,
    open: true,
    models: [...def.models],
+  base: def.base || '', protocol: def.protocol || 'openai', custom: !!def.custom,
    creds: rows.map(c => ({
     id: c.id,
     name: c.name,
@@ -537,11 +536,14 @@ const transBlocks=b=>b.chapters.reduce((a,c)=>a+c.blocks.filter(x=>x.type==='par
 const state={
  books:[], jobs:[],
  selBook:null, expanded:new Set(),
- profiles:[], activeProfile:null, glossSearch:'', providers:backendProviderState([]),
+ profiles:[], activeProfile:null, glossSearch:'', providers:backendProviderState([],[]),
  job:null, settings:{dir:'',chunk:1200,ctx:2,retry:2,cool:0.05}
 };
-const STRATS={'Auto Failover (All Available Keys)':['gemini-1.5-pro','llama-3.3-70b-versatile','gpt-4o-mini'],'Prefer Gemini':['gemini-1.5-pro','gemini-1.5-flash','gemini-2.0-flash'],'Prefer Groq':['llama-3.3-70b-versatile','llama-3.1-8b-instant'],'Prefer TokenRouter':['gpt-4o-mini','claude-3-5-sonnet'],'Prefer OrCarRouter':['deepseek-v3','qwen-2.5-72b-instruct']};
-const stratProv=s=>s.startsWith('Prefer')?s.replace('Prefer ',''):'Auto Failover';
+function syncStrategies(){
+ const select=$('#cfgStrat'), current=select.value;
+ select.innerHTML=['<option value="auto">Auto Failover (All Available Providers)</option>'].concat(state.providers.map(p=>`<option value="${esc(p.id)}">Prefer ${esc(p.name)}</option>`)).join('');
+ if([...select.options].some(option=>option.value===current))select.value=current;
+}
 const activeKeys=()=>state.providers.reduce((a,p)=>a+p.creds.filter(c=>c.status==='AVAILABLE').length,0);
 const rel=t=>{const d=Date.now()-t;if(d<6e4)return'just now';if(d<36e5)return Math.round(d/6e4)+' min ago';if(d<864e5)return Math.round(d/36e5)+' h ago';return Math.round(d/864e5)+' d ago'};
 
@@ -682,8 +684,7 @@ let importInFlight = false;
 function importBook(file,fmt){
  if(importInFlight) return;
  if(!bookBridge){
-  if(!file) return infoBox('Desktop App Required','Book imports are available from the BookBridge desktop application.','warn');
-  infoBox('Desktop App Required','Book imports require the BookBridge desktop application.','warn');
+  infoBox('Open the Desktop App','Book imports require the PySide6 desktop app. Close this browser tab and run <b>python -m bookbridge.app</b> from the project folder, then import the file from Book Library.','warn');
   return;
  }
  importInFlight = true;
@@ -742,16 +743,32 @@ dz.addEventListener('drop',e=>{
 
 /* ================= studio ================= */
 function renderStudio(){
+ syncStrategies();
  const cb=$('#cfgBook');
  cb.innerHTML=state.books.length?state.books.map(b=>`<option value="${b.id}" ${b.id===state.selBook?'selected':''}>${esc(b.title)} (${b.format})</option>`).join(''):'<option value="">— no books imported —</option>';
  if(!cb.value&&state.books.length)cb.value=state.books[0].id;
  const cg=$('#cfgGloss');
  cg.innerHTML=`<option value="">None (No glossary rules)</option>`+state.profiles.map(p=>`<option value="${p.id}" ${p.id===state.activeProfile?'selected':''}>${esc(p.name)} · ${p.genre} · ${p.terms.length} terms</option>`).join('');
- syncModels();syncJobUI();
+ syncModels();
+ syncJobUI();
+ if(state.job){
+  paintJob(state.job);
+  if(state.job.status==='RUNNING'){
+   setStatusMsg(`Translating segment ${state.job.seg || 0} of ${state.job.segT || 0}…`,'run');
+  }else if(state.job.status==='COMPLETED'){
+   setStatusMsg(`Translation complete (${state.job.seg || 0}/${state.job.segT || 0} segments).`,'ok');
+  }else if(state.job.status==='PAUSED'){
+   setStatusMsg('Job Paused.','warn');
+  }else if(state.job.status==='NEEDS_REVIEW'||state.job.status==='FAILED'){
+   setStatusMsg('Translation stopped — needs review.','warn');
+  }
+ }
 }
 function syncModels(){
- const m=$('#cfgModel'),s=STRATS[$('#cfgStrat').value];
- m.innerHTML=s.map(x=>`<option>${x}</option>`).join('');
+ const selected=$('#cfgStrat').value;
+ const providers=selected==='auto'?state.providers:state.providers.filter(p=>p.id===selected);
+ const models=[...new Set(providers.flatMap(p=>p.models||[]))];
+ $('#cfgModel').innerHTML=(models.length?models:['No models configured']).map(x=>`<option>${esc(x)}</option>`).join('');
 }
 $('#cfgStrat').addEventListener('change',syncModels);
 function syncJobUI(){
@@ -766,19 +783,25 @@ function syncJobUI(){
  else if(j.scheduled){st.className='bdg b-warn';st.innerHTML='<i></i> SCHEDULED'}
  else if(j.status==='RUNNING'){st.className='bdg b-run';st.innerHTML='<i></i> RUNNING'}
  else if(j.status==='PAUSED'){st.className='bdg b-warn';st.innerHTML='<i></i> PAUSED'}
+ else if(j.status==='NEEDS_REVIEW'||j.status==='FAILED'){st.className='bdg b-err';st.innerHTML='<i></i> '+j.status.replace('_',' ')}
  else{st.className='bdg b-ok';st.innerHTML='<i></i> COMPLETED'}
 }
-function setStatusMsg(txt,cls){const el=$('#jobStatus');el.className='job-status '+(cls||'');el.innerHTML=`${ic(cls==='ok'?'check':cls==='warn'?'alert':'info')} ${txt}`}
+function setStatusMsg(txt,cls){const el=$('#jobStatus');if(!el)return;el.className='job-status '+(cls||'');el.innerHTML=`${ic(cls==='ok'?'check':cls==='warn'?'alert':cls==='err'?'alert':'info')} ${txt}`}
 function paintJob(j){
- const pct=j.segT?j.seg/j.segT*100:0;
- $('#jobFill').style.width=pct+'%';
- $('#jobPctText').textContent=pct.toFixed(1)+'%';
- $('#mSeg').textContent=`${j.seg} / ${j.segT}`;
- $('#mCached').textContent=fmt(j.cached);
- $('#mTokens').textContent=fmt(j.tokens);
- $('#mProv').textContent=j.prov+' · '+j.model;
- $('#mRetry').textContent=j.retries;
- $('#mFail').textContent=j.failures;
+ if(!j)return;
+ const total=Number(j.segT)||0;
+ const cur=Number(j.seg)||0;
+ const pct=total>0?Math.min(100,(cur/total)*100):0;
+ const fill=$('#jobFill'), pctTxt=$('#jobPctText');
+ if(fill)fill.style.width=pct.toFixed(1)+'%';
+ if(pctTxt)pctTxt.textContent=pct.toFixed(1)+'%';
+ const mSeg=$('#mSeg'), mCached=$('#mCached'), mTok=$('#mTokens'), mProv=$('#mProv'), mRet=$('#mRetry'), mFail=$('#mFail');
+ if(mSeg)mSeg.textContent=`${cur} / ${total}`;
+ if(mCached)mCached.textContent=fmt(Number(j.cached)||0);
+ if(mTok)mTok.textContent=fmt(Number(j.tokens)||0);
+ if(mProv)mProv.textContent=(j.prov||'—')+' · '+(j.model||'—');
+ if(mRet)mRet.textContent=j.retries||0;
+ if(mFail)mFail.textContent=j.failures||0;
 }
 $('#btnStart').onclick=()=>{
  const bookId=$('#cfgBook').value;
@@ -786,13 +809,18 @@ $('#btnStart').onclick=()=>{
  if(!bookBridge)return infoBox('Desktop App Required','Translations run through the BookBridge desktop application.','warn');
  const startBtn = $('#btnStart');
  startBtn.disabled = true;
- bookBridge.create_job(bookId,$('#cfgOut').value,$('#cfgStyle').value,raw=>{
+ const glossId=$('#cfgGloss').value||'';
+ const strat=$('#cfgStrat').value||'auto';
+ const model=$('#cfgModel').value||'';
+ setStatusMsg('Initializing translation job…','run');
+ bookBridge.create_job(bookId,$('#cfgOut').value,$('#cfgStyle').value,glossId,strat,model,raw=>{
   startBtn.disabled = false;
   try {
    const result=JSON.parse(raw);
-   if(!result.ok)return infoBox('Translation Failed',esc(result.error),'err');
+   if(!result.ok){setStatusMsg('Failed to start translation.','err');return infoBox('Translation Failed',esc(result.error),'err');}
    const j=result.job;
-   state.job={bookId:j.bookId,status:j.status,seg:j.segments,segT:j.segmentsTotal,tokens:j.tokens,cached:j.cached,retries:j.retries,failures:j.failures,prov:'—',model:'—'};
+   state.job={id:j.id,bookId:j.bookId,status:j.status,seg:j.segments,segT:j.segmentsTotal,tokens:j.tokens,cached:j.cached,retries:j.retries,failures:j.failures,prov:j.provider||'—',model:j.model||'—'};
+   paintJob(state.job);
    syncJobUI();
    toast('Translation started.','info');
   } catch(e) {
@@ -801,13 +829,13 @@ $('#btnStart').onclick=()=>{
  });
 };
 $('#btnPause').onclick=()=>{
- if(bookBridge){bookBridge.pause_job(()=>{toast('Job pause requested.','warn');refreshBackend()});return}
+ if(bookBridge){$('#btnPause').disabled=true;setStatusMsg('Pause requested; current segment will finish first.','warn');bookBridge.pause_job(()=>{toast('Job pause requested.','warn');refreshBackend()});return}
  const j=state.job;if(!j)return;j.status='PAUSED';
  clearInterval(state.timer);state.timer=null;
  setStatusMsg('Job Paused.','warn');syncJobUI();toast('Job paused — progress preserved.','warn');
 };
 function cancelJob(silent){
- if(bookBridge){bookBridge.cancel_job(()=>{if(!silent)toast('Job cancellation requested.','warn');refreshBackend()});return}
+ if(bookBridge){$('#btnCancel').disabled=true;setStatusMsg('Cancellation requested; current segment will finish first.','warn');bookBridge.cancel_job(()=>{if(!silent)toast('Job cancellation requested.','warn');refreshBackend()});return}
  const j=state.job;if(!j)return;
  clearInterval(state.timer);state.timer=null;
  if(j.scheduled){state.job=null;setStatusMsg('Ready to start translation.');$('#jobFill').style.width='0%';$('#jobPctText').textContent='0.0%';
@@ -890,25 +918,86 @@ function renderCreds(){
   let html=`<div class="cred-root ${p.open?'open':''}" data-proot="${pi}">
    <span class="chev">${ic('chev','ic-sm')}</span>${ic('zap')}
    <span style="flex:1"><span class="pname">${esc(p.name)}</span><span class="prate">${p.rate}</span></span>
-   <span class="bdg ${cls}"><i></i>${st}</span></div>`;
+  <span class="bdg ${cls}"><i></i>${st}</span>${p.custom?`<button class="btn btn-sec btn-sm" data-provider-edit="${esc(p.id)}">Edit</button><button class="btn btn-danger btn-sm" data-provider-delete="${esc(p.id)}">Delete</button>`:''}</div>`;
   if(p.open){
-   html+=`<div class="cred-group">${ic('key','ic-sm')} API Keys — ${p.creds.length} configured</div>`;
+  html+=`<div class="cred-group">${ic('key','ic-sm')} API Keys — ${p.creds.length} configured</div>`;
+  if(p.custom)html+=`<div class="cred-group"><span>Models:</span>${p.models.map(model=>`<span class="chip chip-type">${esc(model)} <button class="m-x" data-model-edit="${esc(p.id)}" data-model-name="${esc(model)}">edit</button><button class="m-x" data-model-delete="${esc(p.id)}" data-model-name="${esc(model)}">x</button></span>`).join('')}<button class="btn btn-sec btn-sm" data-model-add="${esc(p.id)}">Add Model</button></div>`;
    if(!p.creds.length)html+=`<div style="padding:6px 16px 16px 46px;color:var(--quiet);font-size:12.5px">No keys configured for this provider. Use “Add API Key”.</div>`;
    html+=p.creds.map((c,ci)=>`<div class="cred-row">
     <div><div class="cr-name">${esc(c.name)}</div><div class="cr-sub">${esc(c.base || '')}</div></div>
     <div class="cr-detail">model <b>${esc(c.model)}</b> · tokens <b>${fmt(c.tokens)}</b><br>ok <b style="color:#34d399">${fmt(c.ok)}</b> · fail <b style="color:#f87171">${c.fail}</b>${c.cd?` · cooldown <b style="color:#fbbf24">${c.cd}s</b>`:''}</div>
-    <span class="bdg ${{AVAILABLE:'b-ok',COOLDOWN:'b-warn',DISABLED:'b-mut',INVALID:'b-err'}[c.status]}"><i></i>${c.status}</span>
+    <span class="bdg ${{AVAILABLE:'b-ok',COOLDOWN:'b-warn',DISABLED:'b-mut',INVALID:'b-err'}[c.status]}"><i></i>${c.status}</span><button class="btn btn-sec btn-sm" data-cred-edit="${esc(c.id)}">Edit</button><button class="btn btn-danger btn-sm" data-cred-delete="${esc(c.id)}">Delete</button>
    </div>`).join('');
   }
   return html;
  }).join('');
 }
 $('#credTree').addEventListener('click',async e=>{
+ const edit=e.target.closest('[data-provider-edit]');
+ const del=e.target.closest('[data-provider-delete]');
+ const addModel=e.target.closest('[data-model-add]');
+ const delModel=e.target.closest('[data-model-delete]');
+ const editModel=e.target.closest('[data-model-edit]');
+ const editCred=e.target.closest('[data-cred-edit]');
+ const delCred=e.target.closest('[data-cred-delete]');
+ if(edit){const p=state.providers.find(x=>x.id===edit.dataset.providerEdit);return openProviderModal(p);}
+ if(del){if(bookBridge)bookBridge.delete_provider(del.dataset.providerDelete,'',raw=>{const r=JSON.parse(raw);r.ok?(toast('Provider deleted.'),refreshBackend()):toast(r.error,'err')});return;}
+ if(addModel){const model=window.prompt('Model name');if(model&&bookBridge)bookBridge.save_provider_model(addModel.dataset.modelAdd,model,()=>refreshBackend());return;}
+ if(delModel){if(bookBridge)bookBridge.delete_provider_model(delModel.dataset.modelDelete,delModel.dataset.modelName,()=>refreshBackend());return;}
+ if(editModel){const model=window.prompt('Model name',editModel.dataset.modelName);if(model&&bookBridge)bookBridge.delete_provider_model(editModel.dataset.modelEdit,editModel.dataset.modelName,()=>bookBridge.save_provider_model(editModel.dataset.modelEdit,model,()=>refreshBackend()));return;}
+ if(delCred){if(bookBridge)bookBridge.delete_credential(delCred.dataset.credDelete,raw=>{const r=JSON.parse(raw);r.ok?(toast('API key deleted.'),refreshBackend()):toast(r.error,'err')});return;}
+ if(editCred){const c=state.providers.flatMap(p=>p.creds).find(x=>x.id===editCred.dataset.credEdit);if(c)openEditCredModal(c);return;}
  const root=e.target.closest('[data-proot]');
  if(root&&!e.target.closest('button')){
   const p=state.providers[+root.dataset.proot];if(p){p.open=!p.open;renderCreds();}
  }
 });
+function openEditCredModal(c){
+ const p=state.providers.find(x=>x.creds.some(cred=>cred.id===c.id))||state.providers[0];
+ const models=(p&&p.models&&p.models.length)?p.models:[c.model||'default'];
+ const m=openModal(`<div class="m-head"><h3>Edit API Credential</h3><button class="m-x" data-mx>${ic('x')}</button></div>
+ <div class="m-body">
+  <div class="form-row"><label class="flabel">Credential Name</label><input class="input" id="ecName" value="${esc(c.name)}"></div>
+  <div class="form-row"><label class="flabel">Model</label><select class="select" id="ecModel">${models.map(x=>`<option value="${esc(x)}" ${x===c.model?'selected':''}>${esc(x)}</option>`).join('')}</select></div>
+  <div class="form-row"><label class="flabel">New API Secret Key (leave blank to keep current)</label><input class="input" id="ecKey" type="password" placeholder="Enter new API secret if updating…" autocomplete="off"></div>
+  <div class="field-err" id="ecErr" hidden></div>
+ </div>
+ <div class="m-foot"><button class="btn btn-sec" data-mx>Cancel</button><button class="btn btn-primary" id="ecSave">${ic('check')} Save Changes</button></div>`);
+ m.querySelector('#ecSave').onclick=()=>{
+  const name=m.querySelector('#ecName').value.trim(),model=m.querySelector('#ecModel').value,key=m.querySelector('#ecKey').value.trim(),err=m.querySelector('#ecErr');
+  if(!name){err.hidden=false;err.textContent='Credential name is required.';return;}
+  if(key&&key.length<8){err.hidden=false;err.textContent='API key must be at least 8 characters.';return;}
+  if(!bookBridge)return;
+  const saveBtn=m.querySelector('#ecSave');
+  saveBtn.disabled=true;
+  bookBridge.update_credential(c.id,name,model,key,raw=>{
+   saveBtn.disabled=false;
+   try{
+    const r=JSON.parse(raw);
+    if(!r.ok){err.hidden=false;err.textContent=r.error;return;}
+    closeModal();refreshBackend();toast(`Credential “${name}” updated.`);
+   }catch(e){err.hidden=false;err.textContent='Failed to parse response.';}
+  });
+ };
+}
+function openProviderModal(provider){
+ const p=provider||{id:'',name:'',base:'',protocol:'openai'};
+ const m=openModal(`<div class="m-head"><h3>${provider?'Edit':'Add'} Provider</h3><button class="m-x" data-mx>${ic('x')}</button></div><div class="m-body"><div class="form-row"><label class="flabel">Provider Name</label><input class="input" id="pcName" value="${esc(p.name)}"></div><div class="form-row"><label class="flabel">Base URL</label><input class="input" id="pcUrl" value="${esc(p.base)}" placeholder="https://api.example.com/v1/chat/completions"></div><div class="form-row"><label class="flabel">API Protocol</label><select class="select" id="pcProtocol"><option value="openai" ${p.protocol==='openai'?'selected':''}>OpenAI-compatible</option><option value="gemini" ${p.protocol==='gemini'?'selected':''}>Gemini-compatible</option></select></div><div class="form-row"><label class="flabel">Initial Models (comma separated)</label><input class="input" id="pcModels" value="${esc((p.models||[]).join(', '))}" placeholder="model-a, model-b"></div><div class="field-err" id="pcErr" hidden></div></div><div class="m-foot"><button class="btn btn-sec" data-mx>Cancel</button><button class="btn btn-primary" id="pcSave">${ic('check')} Save Provider</button></div>`);
+ m.querySelector('#pcSave').onclick=()=>{
+  const name=m.querySelector('#pcName').value.trim(),url=m.querySelector('#pcUrl').value.trim();
+  if(!name||!url){const err=m.querySelector('#pcErr');err.hidden=false;err.textContent='Provider name and base URL are required.';return}
+  if(!bookBridge)return;
+  bookBridge.save_provider(p.id,name,url,m.querySelector('#pcProtocol').value,raw=>{
+   const r=JSON.parse(raw);
+   if(!r.ok){m.querySelector('#pcErr').hidden=false;m.querySelector('#pcErr').textContent=r.error;return}
+   const models=m.querySelector('#pcModels').value.split(',').map(x=>x.trim()).filter(Boolean);
+   let pending=models.length;
+   if(!pending){closeModal();refreshBackend();return}
+   models.forEach(model=>bookBridge.save_provider_model(r.provider.id,model,()=>{if(!--pending){closeModal();refreshBackend()}}));
+  });
+ };
+}
+$('#btnAddProvider').onclick=()=>openProviderModal();
 $('#btnAddKey').onclick=()=>{
  if (!state.providers.length) {
   state.providers = backendProviderState([]);
@@ -1005,22 +1094,28 @@ $('#btnSaveSet').onclick=()=>{
   msg.className='warn';msg.textContent='Invalid export directory — choose a writable absolute path.';
   toast('Settings not saved — invalid export directory.','warn');return;
  }
+ const rawCool = parseFloat($('#setCool').value);
+ const coolVal = isNaN(rawCool) ? 0.05 : Math.max(0, Math.min(60, rawCool));
+ const ctxVal = Math.max(0, Math.min(10, parseInt($('#setCtx').value, 10) || 0));
+ const retryVal = Math.max(0, Math.min(5, parseInt($('#setRetry').value, 10) || 0));
  const saveBtn = $('#btnSaveSet');
  saveBtn.disabled = true;
  if(bookBridge){
-  bookBridge.save_settings(dir,chunk,Math.max(0,Math.min(10,+$('#setCtx').value||0)),Math.max(0,Math.min(5,+$('#setRetry').value||0)),Math.max(0,Math.min(60,+$('#setCool').value||0)),raw=>{
+  bookBridge.save_settings(dir,chunk,ctxVal,retryVal,coolVal,raw=>{
    saveBtn.disabled = false;
    try {
     const result=JSON.parse(raw);
     if(!result.ok){msg.className='warn';msg.textContent=result.error;return}
+    Object.assign(state.settings,{dir,chunk,ctx:ctxVal,retry:retryVal,cool:coolVal});
     msg.className='ok';msg.textContent='Settings updated successfully.';toast('Settings saved.');
+    refreshBackend();
    } catch(e) {
     msg.className='warn';msg.textContent='Failed to parse response.';
    }
   });
   return;
  }
- Object.assign(state.settings,{dir,chunk,ctx:Math.max(0,Math.min(10,+$('#setCtx').value||0)),retry:Math.max(0,Math.min(5,+$('#setRetry').value||0)),cool:Math.max(0,Math.min(60,+$('#setCool').value||0))});
+ Object.assign(state.settings,{dir,chunk,ctx:ctxVal,retry:retryVal,cool:coolVal});
  saveBtn.disabled = false;
  msg.className='ok';msg.textContent='Settings updated successfully.';
  toast('Settings saved — exports, cache, logs and vault verified.');
@@ -1036,11 +1131,11 @@ function hydrateBackend(raw){
  try {
   const data=JSON.parse(raw);
   state.books=data.books||[];
-  state.jobs=(data.jobs||[]).map(j=>({bookId:j.bookId,status:j.status,prog:j.progress,seg:j.segments,segT:j.segmentsTotal,tokens:j.tokens,upd:Date.parse(j.updatedAt)||Date.now()}));
-  const active=state.jobs.find(j=>j.status==='RUNNING'||j.status==='PAUSED')||state.jobs[0];
-  state.job=active?{bookId:active.bookId,status:active.status,seg:active.seg,segT:active.segT,tokens:active.tokens,cached:0,retries:0,failures:0,prov:'—',model:'—'}:null;
+  state.jobs=(data.jobs||[]).map(j=>({id:j.id,bookId:j.bookId,bookTitle:j.bookTitle,status:j.status,prog:j.progress,seg:j.segments,segT:j.segmentsTotal,tokens:j.tokens,cached:j.cached,failures:j.failures,retries:j.retries,provider:j.provider,model:j.model,upd:Date.parse(j.updatedAt)||Date.now()}));
+  const active=state.jobs.find(j=>j.status==='RUNNING'||j.status==='PAUSED'||j.status==='NEEDS_REVIEW')||state.jobs[0];
+  state.job=active?{id:active.id,bookId:active.bookId,status:active.status,seg:active.seg,segT:active.segT,tokens:active.tokens,cached:active.cached||0,retries:active.retries||0,failures:active.failures||0,prov:active.provider||state.job?.prov||'—',model:active.model||state.job?.model||'—'}:null;
   state.profiles=data.profiles||[];
-  state.providers=backendProviderState(data.credentials||[]);
+  state.providers=backendProviderState(data.credentials||[],data.settings?.providers||[]);
   state.settings=data.settings||state.settings;
   if(document.body.classList.contains('modal-open')){backendRefreshQueued=true;return}
   renderDashboard();renderLibrary();renderStudio();renderGlossary();renderCreds();renderSettings();
@@ -1063,11 +1158,45 @@ function refreshBackend(){
  });
 }
 function connectBackend(){
- if(typeof qt==='undefined'||!qt.webChannel)return;
+ if(typeof qt==='undefined'||!qt.webChannelTransport||typeof QWebChannel==='undefined')return;
  new QWebChannel(qt.webChannelTransport,channel=>{
   bookBridge=channel.objects.bookBridge;
-  bookBridge.job_progress.connect(raw=>{try{const event=JSON.parse(raw);const j=event.job;const existing=state.jobs.find(x=>x.bookId===j.bookId);const view=existing||{bookId:j.bookId};Object.assign(view,{status:j.status,prog:j.progress,seg:j.segments,segT:j.segmentsTotal,tokens:j.tokens,upd:Date.now()});if(!existing)state.jobs.unshift(view);if(event.segment){$('#srcPanel').textContent=event.segment.source;$('#arPanel').textContent=event.segment.translated}paintJob({seg:j.segments,segT:j.segmentsTotal,cached:j.cached,tokens:j.tokens,prov:event.segment?.provider||'—',model:event.segment?.model||'—',retries:j.retries,failures:j.failures});syncJobUI();renderDashboard()}catch(e){}});
-  bookBridge.job_finished.connect(()=>refreshBackend());
+  bookBridge.job_progress.connect(raw=>{
+   try{
+    const event=JSON.parse(raw);
+    const j=event.job;
+    const existing=state.jobs.find(x=>x.id===j.id||x.bookId===j.bookId);
+    const view=existing||{id:j.id,bookId:j.bookId};
+    Object.assign(view,{id:j.id,status:j.status,prog:j.progress,seg:j.segments,segT:j.segmentsTotal,tokens:j.tokens,cached:j.cached,retries:j.retries,failures:j.failures,provider:event.segment?.provider||j.provider,model:event.segment?.model||j.model,upd:Date.now()});
+    if(!existing)state.jobs.unshift(view);
+    state.job={id:j.id,bookId:j.bookId,status:j.status,seg:j.segments,segT:j.segmentsTotal,tokens:j.tokens,cached:j.cached,retries:j.retries,failures:j.failures,prov:event.segment?.provider||state.job?.prov||'—',model:event.segment?.model||state.job?.model||'—'};
+    if(event.segment && event.segment.source){
+      const srcEl=$('#srcPanel'), arEl=$('#arPanel');
+      if(srcEl)srcEl.textContent=event.segment.source;
+      if(arEl)arEl.textContent=event.segment.translated||'Translating…';
+    }
+    paintJob(state.job);
+    if(j.status==='RUNNING'){
+      setStatusMsg(`Translating segment ${j.segments} of ${j.segmentsTotal}…`,'run');
+    }else if(j.status==='COMPLETED'){
+      setStatusMsg(`Translation completed (${j.segments}/${j.segmentsTotal} segments).`,'ok');
+    }else if(j.status==='PAUSED'){
+      setStatusMsg('Job Paused.','warn');
+    }
+    syncJobUI();
+    renderDashboard();
+   }catch(e){console.error('job_progress error',e);}
+  });
+  bookBridge.job_finished.connect((success,message)=>{
+   refreshBackend();
+   if(success){
+    setStatusMsg('Translation completed successfully.','ok');
+    infoBox('Translation Complete','The translation finished successfully.','ok');
+   }else{
+    setStatusMsg('Translation stopped: '+(message||'Allowed attempts reached'),'warn');
+    infoBox('Translation Stopped',esc(message||'The translation stopped after the allowed attempts.'),'err');
+   }
+  });
   bookBridge.data_changed.connect(()=>refreshBackend());
   refreshBackend();
  });

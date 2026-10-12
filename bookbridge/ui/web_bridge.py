@@ -1,6 +1,7 @@
 """Qt WebChannel bridge between the HTML UI and BookBridge services."""
 
 import json
+import uuid
 from pathlib import Path
 from typing import Any, Optional
 
@@ -20,6 +21,7 @@ from bookbridge.models.job import TranslationJob
 from bookbridge.models.glossary import GlossaryProfile, GlossaryTerm
 from bookbridge.config.constants import GlossaryCategory, MatchType
 from bookbridge.models.provider import ProviderCredentialMetadata
+from bookbridge.models.provider_config import ProviderConfig
 from bookbridge.security.keyring_manager import keyring_manager
 from bookbridge.ui.async_worker import AsyncWorker
 
@@ -105,7 +107,7 @@ class WebBridge(QObject):
             "credentials": [
                 {
                     "id": cred.id,
-                    "provider": cred.provider.value,
+                    "provider": cred.extra_config.get("provider_id", cred.provider.value),
                     "name": cred.name,
                     "model": cred.model,
                     "enabled": cred.enabled,
@@ -146,8 +148,55 @@ class WebBridge(QObject):
                 "ctx": settings.context_window_blocks,
                 "retry": settings.max_validation_retries,
                 "cool": settings.normal_request_cooldown_seconds,
+                "providers": settings.provider_configs,
             },
         })
+
+    @Slot(str, str, str, str, result=str)
+    def save_provider(self, provider_id: str, name: str, base_url: str, protocol: str) -> str:
+        try:
+            config = ProviderConfig(id=provider_id.strip() or str(uuid.uuid4()), name=name.strip(), base_url=base_url.strip(), protocol=protocol)
+            if not config.name or not config.base_url:
+                return self._dump({"ok": False, "error": "Provider name and base URL are required."})
+            rows = [row for row in settings.provider_configs if row.get("id") != config.id]
+            rows.append(config.model_dump(mode="json"))
+            settings.provider_configs = rows
+            settings.save()
+            self.data_changed.emit("credentials")
+            return self._dump({"ok": True, "provider": config.model_dump(mode="json")})
+        except (OSError, TypeError, ValueError) as exc:
+            return self._dump({"ok": False, "error": str(exc)})
+
+    @Slot(str, str, result=str)
+    def delete_provider(self, provider_id: str, replacement: str = "") -> str:
+        if any(c.extra_config.get("provider_id") == provider_id for c in self.cred_repo.list_credentials()):
+            return self._dump({"ok": False, "error": "Delete or move this provider's API keys first."})
+        settings.provider_configs = [row for row in settings.provider_configs if row.get("id") != provider_id]
+        settings.save()
+        self.data_changed.emit("credentials")
+        return self._dump({"ok": True})
+
+    @Slot(str, str, result=str)
+    def save_provider_model(self, provider_id: str, model: str) -> str:
+        model = model.strip()
+        for row in settings.provider_configs:
+            if row.get("id") == provider_id:
+                if model and model not in row.setdefault("models", []):
+                    row["models"].append(model)
+                settings.save()
+                self.data_changed.emit("credentials")
+                return self._dump({"ok": True})
+        return self._dump({"ok": False, "error": "Provider not found."})
+
+    @Slot(str, str, result=str)
+    def delete_provider_model(self, provider_id: str, model: str) -> str:
+        for row in settings.provider_configs:
+            if row.get("id") == provider_id:
+                row["models"] = [item for item in row.get("models", []) if item != model]
+                settings.save()
+                self.data_changed.emit("credentials")
+                return self._dump({"ok": True})
+        return self._dump({"ok": False, "error": "Provider not found."})
 
     @Slot(str, result=str)
     def import_book(self, file_format: str) -> str:
@@ -187,7 +236,16 @@ class WebBridge(QObject):
         return self._dump({"ok": True})
 
     @Slot(str, str, str, result=str)
-    def create_job(self, book_id: str, output_format: str, style: str) -> str:
+    @Slot(str, str, str, str, str, str, result=str)
+    def create_job(
+        self,
+        book_id: str,
+        output_format: str,
+        style: str,
+        glossary_id: str = "",
+        strategy: str = "auto",
+        model: str = "",
+    ) -> str:
         book = self.book_repo.get_book(book_id)
         if not book:
             return self._dump({"ok": False, "error": "Book not found."})
@@ -197,11 +255,19 @@ class WebBridge(QObject):
             "Xianxia — Genre Native": TranslationStyleType.WEB_NOVEL,
             "Fast Draft — Speed First": TranslationStyleType.NATURAL,
         }
+        custom_settings = {}
+        if strategy and strategy.strip():
+            custom_settings["strategy"] = strategy.strip()
+        if model and model.strip() and model != "No models configured":
+            custom_settings["preferred_model"] = model.strip()
+
         job = TranslationJob(
             book_id=book.id,
             book_title=book.metadata.title,
             output_format=output_format.lower(),
             style=style_values.get(style, TranslationStyleType.NATURAL),
+            glossary_profile_id=glossary_id.strip() if glossary_id and glossary_id.strip() else None,
+            custom_settings=custom_settings,
         )
         self.job_repo.create_job(job)
         self._job_id = job.id
@@ -214,20 +280,48 @@ class WebBridge(QObject):
     @Slot(str, str, str, str, result=str)
     def save_credential(self, provider: str, name: str, model: str, secret: str) -> str:
         try:
+            provider_config = next((row for row in settings.provider_configs if row.get("id") == provider), None)
+            provider_type = ProviderType.CUSTOM if provider_config else ProviderType(provider)
             credential = ProviderCredentialMetadata(
-                provider=ProviderType(provider),
+                provider=provider_type,
                 name=name.strip(),
                 model=model.strip(),
+                rate_limit_rpm=provider_config.get("rate_limit_rpm") if provider_config else None,
+                rate_limit_tpm=provider_config.get("rate_limit_tpm") if provider_config else None,
+                rate_limit_rpd=provider_config.get("rate_limit_rpd") if provider_config else None,
+                extra_config={"provider_id": provider} if provider_config else {},
             )
             if not credential.name or not credential.model or not secret.strip():
                 return self._dump({"ok": False, "error": "Provider, name, model, and secret are required."})
-            if not keyring_manager.save_secret(credential.id, secret):
+            if not keyring_manager.save_secret(credential.id, secret.strip()):
                 return self._dump({"ok": False, "error": "The credential could not be saved securely."})
             self.cred_repo.save_credential_metadata(credential)
             self.data_changed.emit("credentials")
             return self._dump({"ok": True})
         except (TypeError, ValueError) as exc:
             return self._dump({"ok": False, "error": str(exc)})
+
+    @Slot(str, str, str, result=str)
+    @Slot(str, str, str, str, result=str)
+    def update_credential(self, credential_id: str, name: str, model: str, secret: str = "") -> str:
+        credential = self.cred_repo.get_credential(credential_id)
+        if not credential or not name.strip() or not model.strip():
+            return self._dump({"ok": False, "error": "Credential, name, and model are required."})
+        credential.name = name.strip()
+        credential.model = model.strip()
+        if secret and secret.strip():
+            if not keyring_manager.save_secret(credential.id, secret.strip()):
+                return self._dump({"ok": False, "error": "The new API secret could not be saved securely."})
+        self.cred_repo.save_credential_metadata(credential)
+        self.data_changed.emit("credentials")
+        return self._dump({"ok": True})
+
+    @Slot(str, result=str)
+    def delete_credential(self, credential_id: str) -> str:
+        self.cred_repo.delete_credential(credential_id)
+        keyring_manager.delete_secret(credential_id)
+        self.data_changed.emit("credentials")
+        return self._dump({"ok": True})
 
     @Slot(str, str, result=str)
     def create_glossary_profile(self, name: str, genre: str) -> str:
@@ -282,9 +376,9 @@ class WebBridge(QObject):
         self.job_runner.cancel()
         return self._dump({"ok": True})
 
-    @Slot(str, int, int, float, result=str)
+    @Slot(str, int, int, int, float, result=str)
     def save_settings(self, directory: str, chunk: int, context: int, retries: int, cooldown: float) -> str:
-        settings.export_directory = directory
+        settings.export_directory = Path(directory.strip()) if directory.strip() else None
         settings.max_segment_chars = max(200, min(5000, chunk))
         settings.context_window_blocks = max(0, min(10, context))
         settings.max_validation_retries = max(0, min(5, retries))
@@ -292,11 +386,23 @@ class WebBridge(QObject):
         try:
             settings.save()
             settings.ensure_directories()
+            self.data_changed.emit("settings")
             return self._dump({"ok": True})
         except OSError as exc:
             return self._dump({"ok": False, "error": str(exc)})
 
     def _on_job_progress(self, job: Any, segment: Any) -> None:
+        """Route progress to the UI. Always go through the worker signal when one is
+        active so Qt's cross-thread marshalling guarantees delivery on the GUI thread."""
+        if self.worker is not None:
+            self.worker.progress_signal.emit(job, segment)
+        else:
+            self._dispatch_progress(job, segment)
+
+    def _on_worker_progress(self, job: Any, segment: Any) -> None:
+        self._dispatch_progress(job, segment)
+
+    def _dispatch_progress(self, job: Any, segment: Any) -> None:
         self.job_progress.emit(self._dump({
             "job": self._job_dict(job),
             "segment": {
@@ -307,9 +413,7 @@ class WebBridge(QObject):
             } if segment else None,
         }))
 
-    def _on_worker_progress(self, job: Any, segment: Any) -> None:
-        self._on_job_progress(job, segment)
-
     def _on_worker_finished(self, success: bool, message: str) -> None:
+        self.worker = None  # Clear reference so future callbacks use direct dispatch
         self.job_finished.emit(success, message)
         self.data_changed.emit("jobs")

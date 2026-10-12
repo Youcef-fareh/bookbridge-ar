@@ -1,14 +1,13 @@
 """Core Translation Pipeline Orchestrator."""
 
 import logging
-from datetime import datetime
 from typing import Optional
 from bookbridge.config.constants import DEFAULT_MAX_RETRIES, ProviderType
 from bookbridge.database.repositories.memory_repo import MemoryRepository
 from bookbridge.glossary.engine import GlossaryEngine
 from bookbridge.models.glossary import GlossaryProfile
 from bookbridge.models.job import Segment, TranslationResult
-from bookbridge.models.style import STYLE_PRESETS, StylePromptConfig, TranslationStyleType
+from bookbridge.models.style import STYLE_PRESETS, TranslationStyleType
 from bookbridge.routing.router import TranslationRouter
 from bookbridge.segmentation.engine import SegmentationEngine
 from bookbridge.validation.engine import ValidationEngine
@@ -36,10 +35,21 @@ class TranslationPipeline:
         source_lang: str = "en",
         target_lang: str = "ar",
         max_retries: int = DEFAULT_MAX_RETRIES,
+        cancel_check=None,
+        glossary_engine: Optional[GlossaryEngine] = None,
     ) -> TranslationResult:
-        """Executes full translation pipeline for a single segment."""
+        """Executes full translation pipeline for a single segment.
+
+        Args:
+            glossary_engine: Optional pre-built engine for this job. If not
+                provided, one is built from ``glossary_profile`` for this call.
+                Pass a cached instance from JobRunner to avoid re-sorting and
+                re-compiling regex patterns on every segment.
+        """
         style_config = STYLE_PRESETS.get(style_type, STYLE_PRESETS[TranslationStyleType.NATURAL])
-        glossary_engine = GlossaryEngine(glossary_profile)
+
+        # Use caller-provided engine or build a fresh one for this call
+        glos_engine = glossary_engine or GlossaryEngine(glossary_profile)
 
         # 1. Deterministic Cache Key Check
         cache_key = SegmentationEngine.generate_cache_key(
@@ -77,13 +87,21 @@ class TranslationPipeline:
             )
 
         # 3. Glossary Term Protection (Mask terms into <NB_TERM_XXX>)
-        protected_text, token_to_target = glossary_engine.protect_text(segment.source_text)
+        protected_text, token_to_target = glos_engine.protect_text(segment.source_text)
 
         # 4. Routing & Translation with Validation Retries
         attempts = 0
-        last_result = None
+        last_result: Optional[TranslationResult] = None
 
         while attempts <= max_retries:
+            if cancel_check and cancel_check():
+                return TranslationResult(
+                    success=False,
+                    cancelled=True,
+                    source_text=segment.source_text,
+                    error="Translation cancelled by user.",
+                    retryable=False,
+                )
             attempts += 1
             result = await self.router.translate_with_failover(
                 text=protected_text,
@@ -95,7 +113,11 @@ class TranslationPipeline:
                 target_lang=target_lang,
                 job_id=segment.job_id,
                 segment_id=segment.id,
+                cancel_check=cancel_check,
             )
+
+            if result.cancelled:
+                return result
 
             if not result.success:
                 last_result = result
@@ -112,9 +134,7 @@ class TranslationPipeline:
 
             if is_valid:
                 # 6. Unmask & Restore Protected Glossary Terms
-                final_arabic_text = glossary_engine.restore_text(
-                    result.translated_text, token_to_target
-                )
+                final_arabic_text = glos_engine.restore_text(result.translated_text, token_to_target)
                 result.translated_text = final_arabic_text
 
                 # 7. Commit to Cache & Translation Memory
@@ -139,17 +159,18 @@ class TranslationPipeline:
                 return result
             else:
                 logger.warning(
-                    f"Segment {segment.order_index} validation failed (attempt {attempts}/{max_retries + 1}): {', '.join(val_errors)}"
+                    f"Segment {segment.order_index} validation failed "
+                    f"(attempt {attempts}/{max_retries + 1}): {', '.join(val_errors)}"
                 )
                 result.validation_errors = val_errors
                 last_result = result
 
-        # If all retries failed validation, return last result marked as needing review
+        # All attempts exhausted — return last result with tokens restored for
+        # human review, but success=False so the job marks it as needs_review.
         if last_result and last_result.translated_text:
-            final_arabic_text = glossary_engine.restore_text(
+            last_result.translated_text = glos_engine.restore_text(
                 last_result.translated_text, token_to_target
             )
-            last_result.translated_text = final_arabic_text
         return last_result or TranslationResult(
             success=False,
             source_text=segment.source_text,

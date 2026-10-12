@@ -15,6 +15,9 @@ from bookbridge.providers.groq import GroqProvider
 from bookbridge.providers.orcarouter import OrCarRouterProvider
 from bookbridge.providers.tokenrouter import TokenRouterProvider
 from bookbridge.providers.mock import MockProvider
+from bookbridge.providers.generic import GenericProvider
+from bookbridge.models.provider_config import ProviderConfig
+from bookbridge.config.settings import settings
 from bookbridge.routing.limiter import RateLimiter, rate_limiter
 from bookbridge.routing.state_machine import CredentialStateMachine
 from bookbridge.security.keyring_manager import keyring_manager
@@ -44,43 +47,47 @@ class TranslationRouter:
     def get_provider_instance(self, provider_type: ProviderType) -> Optional[TranslationProvider]:
         return self._providers.get(provider_type)
 
+    def get_provider_for_credential(self, credential: ProviderCredentialMetadata) -> Optional[TranslationProvider]:
+        if credential.provider == ProviderType.CUSTOM:
+            provider_id = credential.extra_config.get("provider_id")
+            config = next((ProviderConfig(**row) for row in settings.provider_configs if row.get("id") == provider_id), None)
+            return GenericProvider(config) if config else None
+        return self.get_provider_instance(credential.provider)
+
     def get_candidate_credentials(
         self, preferred_provider: Optional[ProviderType] = None, estimated_tokens: int = 500
     ) -> List[ProviderCredentialMetadata]:
-        """Fetch all enabled credentials, recovering expired cooldowns and ordering by health and capacity."""
+        """Return enabled credentials ordered by health and capacity.
+
+        Cooldown recovery is intentionally deferred to the failover loop so
+        that *reading* credentials has no database write side-effects.
+        """
         all_creds = self.credential_repo.list_credentials(only_enabled=True)
 
-        # Check and recover cooldowns / daily limits
-        for c in all_creds:
-            CredentialStateMachine.check_and_recover_cooldown(c)
-            # Check if daily limit (RPD) is exceeded
-            daily_count = self.rate_limiter.get_24h_request_count(c.id)
-            if daily_count >= c.effective_rpd:
-                c.state = CredentialState.RATE_LIMITED
-                c.last_error_message = f"Daily request limit (RPD: {c.effective_rpd}) reached."
-            self.credential_repo.save_credential_metadata(c)
+        # Only keep credentials that are not permanently disabled
+        available = [c for c in all_creds if c.is_available or c.state in (CredentialState.RATE_LIMITED, CredentialState.COOLDOWN)]
 
-        # Filter to available
-        available = [c for c in all_creds if c.is_available]
+        if len(available) < len(all_creds):
+            for cred in all_creds:
+                if not cred.is_available and cred.state not in (CredentialState.RATE_LIMITED, CredentialState.COOLDOWN):
+                    logger.warning(
+                        "Credential '%s' is unavailable: state=%s, enabled=%s, reason=%s",
+                        cred.name, cred.state.value, cred.enabled,
+                        cred.last_error_message or "none",
+                    )
 
-        logger.info(f"Found {len(available)} available credential(s) out of {len(all_creds)} total")
-        for c in available:
-            secret_exists = keyring_manager.get_secret(c.id) is not None
-            can_go, wait_s, reason = self.rate_limiter.check_capacity(c, estimated_tokens)
-            logger.debug(
-                f"Credential: {c.name} ({c.provider.value}), Secret: {secret_exists}, "
-                f"Limits: RPM={c.effective_rpm} TPM={c.effective_tpm} RPD={c.effective_rpd}, "
-                f"Wait: {wait_s:.2f}s ({reason})"
-            )
-
-        # Prioritize:
-        # 1. Matching preferred provider (if preferred)
-        # 2. Immediate capacity (0 wait time vs waiting for sliding window)
-        # 3. Lowest consecutive failures
-        # 4. Lowest failure count
-        # 5. Lowest token usage
         def sort_key(c: ProviderCredentialMetadata):
-            is_preferred = 0 if (preferred_provider and c.provider == preferred_provider) else 1
+            is_pref = False
+            if preferred_provider:
+                if isinstance(preferred_provider, ProviderType):
+                    is_pref = (c.provider == preferred_provider)
+                else:
+                    pref_str = str(preferred_provider).lower()
+                    is_pref = (
+                        c.provider.value.lower() == pref_str
+                        or str(c.extra_config.get("provider_id", "")).lower() == pref_str
+                    )
+            is_preferred = 0 if is_pref else 1
             can_go, wait_s, _ = self.rate_limiter.check_capacity(c, estimated_tokens)
             has_capacity = 0 if can_go else (1 if wait_s < 30.0 else 2)
             return (is_preferred, has_capacity, c.consecutive_failures, c.failure_count, c.total_tokens_used)
@@ -98,6 +105,7 @@ class TranslationRouter:
         target_lang: str = "ar",
         job_id: Optional[str] = None,
         segment_id: Optional[str] = None,
+        cancel_check=None,
     ) -> TranslationResult:
         """
         Executes translation, strictly respecting RPM, TPM, and RPD rate limits
@@ -115,7 +123,18 @@ class TranslationRouter:
 
         last_error = ""
         for cred in candidates:
-            provider = self.get_provider_instance(cred.provider)
+            if cancel_check and cancel_check():
+                return TranslationResult(success=False, cancelled=True, source_text=text, error="Translation cancelled by user.", retryable=False)
+
+            # Lazy cooldown recovery: only check+recover when we are about to use a credential
+            if cred.state in (CredentialState.RATE_LIMITED, CredentialState.COOLDOWN):
+                CredentialStateMachine.check_and_recover_cooldown(cred)
+                self.credential_repo.save_credential_metadata(cred)
+                if not cred.is_available:
+                    logger.debug(f"Credential '{cred.name}' still in cooldown, skipping.")
+                    continue
+
+            provider = self.get_provider_for_credential(cred)
             if not provider:
                 logger.warning(f"No provider instance for {cred.provider.value}")
                 continue
@@ -132,8 +151,15 @@ class TranslationRouter:
                 continue
 
             # Strict Rate Limiting: acquire token/request budget before making API call
-            acquired = await self.rate_limiter.acquire(cred, estimated_tokens=estimated_tokens, max_wait_seconds=65.0)
+            acquired = await self.rate_limiter.acquire(
+                cred,
+                estimated_tokens=estimated_tokens,
+                max_wait_seconds=65.0,
+                cancel_check=cancel_check,
+            )
             if not acquired:
+                if cancel_check and cancel_check():
+                    return TranslationResult(success=False, source_text=text, error="Translation cancelled by user.", retryable=False)
                 logger.warning(
                     f"Could not acquire rate limit slot for '{cred.name}' ({cred.provider.value}). Failing over to next key..."
                 )
@@ -153,6 +179,9 @@ class TranslationRouter:
                 source_lang=source_lang,
                 target_lang=target_lang,
             )
+
+            if cancel_check and cancel_check():
+                return TranslationResult(success=False, cancelled=True, source_text=text, error="Translation cancelled by user.", retryable=False)
 
             if result.success:
                 logger.info(f"Translation successful with {cred.provider.value} key '{cred.name}'")
@@ -187,7 +216,7 @@ class TranslationRouter:
 
             self.credential_repo.save_credential_metadata(cred)
             logger.warning(f"Failover: Credential '{cred.name}' failed ({last_error}). Trying next credential...")
-            await asyncio.sleep(0.5)
+            await asyncio.sleep(0.1)  # Minimal inter-credential delay; user cooldown is applied by JobRunner
 
         return TranslationResult(
             success=False,
@@ -195,7 +224,3 @@ class TranslationRouter:
             error=f"All available AI credentials failed. Last error: {last_error}",
             retryable=True,
         )
-
-
-# Global router singleton
-router = TranslationRouter()

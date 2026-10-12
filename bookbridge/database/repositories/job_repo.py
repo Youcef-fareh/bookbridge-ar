@@ -21,6 +21,36 @@ def _from_iso(val: Optional[str]) -> Optional[datetime]:
         return None
 
 
+def _row_to_job(row) -> "TranslationJob":
+    """Map a DB row to a TranslationJob model (shared between get_job and list_jobs)."""
+    custom_settings = json.loads(row["custom_settings_json"]) if row["custom_settings_json"] else {}
+    return TranslationJob(
+        id=row["id"],
+        book_id=row["book_id"],
+        book_title=row["book_title"] or "",
+        status=JobStatus(row["status"]),
+        source_language=row["source_language"],
+        target_language=row["target_language"],
+        style=TranslationStyleType(row["style"]),
+        glossary_profile_id=row["glossary_profile_id"],
+        output_format=row["output_format"],
+        total_chapters=row["total_chapters"],
+        completed_chapters=row["completed_chapters"],
+        current_chapter_title=row["current_chapter_title"] or "",
+        total_segments=row["total_segments"],
+        completed_segments=row["completed_segments"],
+        cached_segments=row["cached_segments"],
+        failed_segments=row["failed_segments"],
+        retried_segments=row["retried_segments"],
+        total_tokens_used=row["total_tokens_used"],
+        error_message=row["error_message"],
+        started_at=_from_iso(row["started_at"]),
+        finished_at=_from_iso(row["finished_at"]),
+        updated_at=_from_iso(row["updated_at"]) or datetime.utcnow(),
+        custom_settings=custom_settings,
+    )
+
+
 class JobRepository:
     def create_job(self, job: TranslationJob) -> None:
         with db.session() as conn:
@@ -148,71 +178,13 @@ class JobRepository:
         c = conn.cursor()
         c.execute("SELECT * FROM translation_jobs WHERE id = ?", (job_id,))
         row = c.fetchone()
-        if not row:
-            return None
-
-        custom_settings = json.loads(row["custom_settings_json"]) if row["custom_settings_json"] else {}
-        return TranslationJob(
-            id=row["id"],
-            book_id=row["book_id"],
-            book_title=row["book_title"] or "",
-            status=JobStatus(row["status"]),
-            source_language=row["source_language"],
-            target_language=row["target_language"],
-            style=TranslationStyleType(row["style"]),
-            glossary_profile_id=row["glossary_profile_id"],
-            output_format=row["output_format"],
-            total_chapters=row["total_chapters"],
-            completed_chapters=row["completed_chapters"],
-            current_chapter_title=row["current_chapter_title"] or "",
-            total_segments=row["total_segments"],
-            completed_segments=row["completed_segments"],
-            cached_segments=row["cached_segments"],
-            failed_segments=row["failed_segments"],
-            retried_segments=row["retried_segments"],
-            total_tokens_used=row["total_tokens_used"],
-            error_message=row["error_message"],
-            started_at=_from_iso(row["started_at"]),
-            finished_at=_from_iso(row["finished_at"]),
-            updated_at=_from_iso(row["updated_at"]) or datetime.utcnow(),
-            custom_settings=custom_settings,
-        )
+        return _row_to_job(row) if row else None
 
     def list_jobs(self, limit: int = 50) -> List[TranslationJob]:
         conn = db.get_connection()
         c = conn.cursor()
         c.execute("SELECT * FROM translation_jobs ORDER BY updated_at DESC LIMIT ?", (limit,))
-        jobs = []
-        for row in c.fetchall():
-            custom_settings = json.loads(row["custom_settings_json"]) if row["custom_settings_json"] else {}
-            jobs.append(
-                TranslationJob(
-                    id=row["id"],
-                    book_id=row["book_id"],
-                    book_title=row["book_title"] or "",
-                    status=JobStatus(row["status"]),
-                    source_language=row["source_language"],
-                    target_language=row["target_language"],
-                    style=TranslationStyleType(row["style"]),
-                    glossary_profile_id=row["glossary_profile_id"],
-                    output_format=row["output_format"],
-                    total_chapters=row["total_chapters"],
-                    completed_chapters=row["completed_chapters"],
-                    current_chapter_title=row["current_chapter_title"] or "",
-                    total_segments=row["total_segments"],
-                    completed_segments=row["completed_segments"],
-                    cached_segments=row["cached_segments"],
-                    failed_segments=row["failed_segments"],
-                    retried_segments=row["retried_segments"],
-                    total_tokens_used=row["total_tokens_used"],
-                    error_message=row["error_message"],
-                    started_at=_from_iso(row["started_at"]),
-                    finished_at=_from_iso(row["finished_at"]),
-                    updated_at=_from_iso(row["updated_at"]) or datetime.utcnow(),
-                    custom_settings=custom_settings,
-                )
-            )
-        return jobs
+        return [_row_to_job(row) for row in c.fetchall()]
 
     def save_segments(self, segments: List[Segment]) -> None:
         with db.session() as conn:
