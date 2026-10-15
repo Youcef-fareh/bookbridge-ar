@@ -2,10 +2,12 @@
 
 import logging
 from pathlib import Path
+from typing import Optional
 from bs4 import BeautifulSoup, NavigableString, Tag
 import ebooklib
 from ebooklib import epub
 from bookbridge.config.constants import BlockType
+from bookbridge.config.settings import settings
 from bookbridge.documents.base import DocumentParser
 from bookbridge.models.book import (
     Book,
@@ -20,8 +22,12 @@ logger = logging.getLogger(__name__)
 
 
 class EpubParser(DocumentParser):
+    def __init__(self, granularity: Optional[str] = None):
+        self.granularity = granularity
+
     def parse(self, file_path: Path) -> Book:
         logger.info(f"Parsing EPUB file: {file_path}")
+        granularity = self.granularity or settings.epub_block_granularity
         book_epub = epub.read_epub(str(file_path))
 
         # Extract metadata
@@ -183,6 +189,26 @@ class EpubParser(DocumentParser):
                     )
                     chapter.blocks.append(block)
                     block_order += 1
+
+                if granularity == "chapter":
+                    text_blocks = [block for block in chapter.blocks if block.has_translatable_text]
+                    if text_blocks:
+                        merged_block = Block(
+                            chapter_id=chapter.id,
+                            type=BlockType.PARAGRAPH,
+                            source_text="\n\n".join(block.source_text.strip() for block in text_blocks),
+                            order_index=min(block.order_index for block in text_blocks),
+                            source_location=SourceLocation(
+                                file_path=item.get_name(),
+                                tag_name="chapter",
+                            ),
+                            is_translatable=True,
+                        )
+                        chapter.blocks = [
+                            merged_block,
+                            *(block for block in chapter.blocks if not block.has_translatable_text),
+                        ]
+                        chapter.blocks.sort(key=lambda block: block.order_index)
 
                 if chapter.blocks:
                     book.chapters.append(chapter)

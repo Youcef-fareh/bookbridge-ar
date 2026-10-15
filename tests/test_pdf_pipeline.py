@@ -71,3 +71,16 @@ def test_pdf_parser_skips_overlapping_duplicate_text_blocks(tmp_path: Path):
         "The same paragraph",
         "The same paragraph",
     ]
+
+
+def test_pdf_page_granularity_combines_page_text_blocks(tmp_path: Path):
+    source_path = tmp_path / "page_granularity.pdf"
+    create_sample_pdf(source_path)
+
+    book = PdfParser(granularity="page").parse(source_path)
+
+    assert len(book.chapters) == 1
+    assert len(book.chapters[0].blocks) == 1
+    page_text = book.chapters[0].blocks[0].source_text
+    assert "Chapter 1: The Mountain Peak" in page_text
+    assert "The water flowed down the mountain" in page_text

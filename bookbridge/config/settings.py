@@ -4,7 +4,7 @@ import os
 import logging
 import json
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 from pydantic import BaseModel, Field, ConfigDict
 
 logger = logging.getLogger(__name__)
@@ -14,7 +14,7 @@ class AppSettings(BaseModel):
     model_config = ConfigDict(validate_assignment=True)
 
     app_name: str = "BookBridge"
-    version: str = "1.0.9"
+    version: str = "1.1.0"
     data_dir: Path = Field(default_factory=lambda: Path(os.getenv("BOOKBRIDGE_DATA_DIR", Path.home() / ".bookbridge")))
     export_directory: Optional[Path] = None
     db_filename: str = "bookbridge.db"
@@ -27,6 +27,8 @@ class AppSettings(BaseModel):
     default_tokenrouter_model: str = "deepseek/deepseek-v4-pro-0813-free"
     max_segment_chars: int = 1200
     context_window_blocks: int = 2
+    epub_block_granularity: Literal["paragraph", "chapter"] = "paragraph"
+    pdf_block_granularity: Literal["paragraph", "page"] = "paragraph"
     max_concurrent_requests: int = 3
     request_timeout_seconds: float = 35.0
     max_validation_retries: int = 2
@@ -59,6 +61,8 @@ class AppSettings(BaseModel):
                 "export_directory",
                 "max_segment_chars",
                 "context_window_blocks",
+                "epub_block_granularity",
+                "pdf_block_granularity",
                 "max_validation_retries",
                 "normal_request_cooldown_seconds",
                 "provider_configs",
@@ -75,6 +79,8 @@ class AppSettings(BaseModel):
             "export_directory": str(self.export_directory) if self.export_directory else None,
             "max_segment_chars": self.max_segment_chars,
             "context_window_blocks": self.context_window_blocks,
+            "epub_block_granularity": self.epub_block_granularity,
+            "pdf_block_granularity": self.pdf_block_granularity,
             "max_validation_retries": self.max_validation_retries,
             "normal_request_cooldown_seconds": self.normal_request_cooldown_seconds,
             "provider_configs": self.provider_configs,

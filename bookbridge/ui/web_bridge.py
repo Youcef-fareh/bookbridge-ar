@@ -23,7 +23,7 @@ from bookbridge.config.constants import GlossaryCategory, MatchType
 from bookbridge.models.provider import ProviderCredentialMetadata
 from bookbridge.models.provider_config import ProviderConfig
 from bookbridge.security.keyring_manager import keyring_manager
-from bookbridge.ui.async_worker import AsyncWorker
+from bookbridge.ui.async_worker import AsyncWorker, BookReparseWorker
 
 
 class WebBridge(QObject):
@@ -32,6 +32,7 @@ class WebBridge(QObject):
     data_changed = Signal(str)
     job_progress = Signal(str)
     job_finished = Signal(bool, str)
+    book_reparse_finished = Signal(str)
 
     def __init__(self, parent: Optional[QObject] = None):
         super().__init__(parent)
@@ -41,6 +42,7 @@ class WebBridge(QObject):
         self.glossary_repo = GlossaryRepository()
         self.job_runner = JobRunner(self.job_repo, self.book_repo, self.glossary_repo)
         self.worker: Optional[AsyncWorker] = None
+        self.reparse_worker: Optional[BookReparseWorker] = None
         self._job_id: Optional[str] = None
         self.job_runner.set_progress_callback(self._on_job_progress)
 
@@ -146,6 +148,8 @@ class WebBridge(QObject):
                 "dir": str(settings.exports_dir),
                 "chunk": settings.max_segment_chars,
                 "ctx": settings.context_window_blocks,
+                "epub_granularity": settings.epub_block_granularity,
+                "pdf_granularity": settings.pdf_block_granularity,
                 "retry": settings.max_validation_retries,
                 "cool": settings.normal_request_cooldown_seconds,
                 "providers": settings.provider_configs,
@@ -376,20 +380,87 @@ class WebBridge(QObject):
         self.job_runner.cancel()
         return self._dump({"ok": True})
 
-    @Slot(str, int, int, int, float, result=str)
-    def save_settings(self, directory: str, chunk: int, context: int, retries: int, cooldown: float) -> str:
-        settings.export_directory = Path(directory.strip()) if directory.strip() else None
-        settings.max_segment_chars = max(200, min(5000, chunk))
-        settings.context_window_blocks = max(0, min(10, context))
-        settings.max_validation_retries = max(0, min(5, retries))
-        settings.normal_request_cooldown_seconds = max(0.0, min(60.0, cooldown))
+    @Slot(str, int, int, int, float, str, str, result=str)
+    def save_settings(
+        self,
+        directory: str,
+        chunk: int,
+        context: int,
+        retries: int,
+        cooldown: float,
+        epub_granularity: str,
+        pdf_granularity: str,
+    ) -> str:
+        if epub_granularity not in ("paragraph", "chapter"):
+            return self._dump({"ok": False, "error": "Invalid EPUB block granularity."})
+        if pdf_granularity not in ("paragraph", "page"):
+            return self._dump({"ok": False, "error": "Invalid PDF block granularity."})
+
+        epub_changed = epub_granularity != settings.epub_block_granularity
+        pdf_changed = pdf_granularity != settings.pdf_block_granularity
+        if (epub_changed or pdf_changed) and self.worker and self.worker.isRunning():
+            return self._dump({
+                "ok": False,
+                "error": "Wait for the active translation to finish before changing block granularity.",
+            })
+        if self.reparse_worker and self.reparse_worker.isRunning():
+            return self._dump({
+                "ok": False,
+                "error": "Existing books are still being updated. Please try again when that finishes.",
+            })
+
+        original_settings = {
+            "export_directory": settings.export_directory,
+            "max_segment_chars": settings.max_segment_chars,
+            "context_window_blocks": settings.context_window_blocks,
+            "max_validation_retries": settings.max_validation_retries,
+            "normal_request_cooldown_seconds": settings.normal_request_cooldown_seconds,
+            "epub_block_granularity": settings.epub_block_granularity,
+            "pdf_block_granularity": settings.pdf_block_granularity,
+        }
         try:
-            settings.save()
+            changed_formats = set()
+            if epub_changed:
+                changed_formats.add("epub")
+            if pdf_changed:
+                changed_formats.add("pdf")
+            book_ids = [
+                book.id
+                for book in self.book_repo.list_books()
+                if book.source_format in changed_formats
+            ]
+
+            settings.export_directory = Path(directory.strip()) if directory.strip() else None
+            settings.max_segment_chars = max(200, min(5000, chunk))
+            settings.context_window_blocks = max(0, min(10, context))
+            settings.max_validation_retries = max(0, min(5, retries))
+            settings.normal_request_cooldown_seconds = max(0.0, min(60.0, cooldown))
+            settings.epub_block_granularity = epub_granularity
+            settings.pdf_block_granularity = pdf_granularity
             settings.ensure_directories()
+            settings.save()
             self.data_changed.emit("settings")
-            return self._dump({"ok": True})
-        except OSError as exc:
+            if book_ids:
+                self.reparse_worker = BookReparseWorker(
+                    book_ids,
+                    epub_granularity,
+                    pdf_granularity,
+                )
+                self.reparse_worker.completed.connect(self._on_book_reparse_finished)
+                self.reparse_worker.finished.connect(self._clear_reparse_worker)
+                self.reparse_worker.start()
+            return self._dump({"ok": True, "reparsing": len(book_ids)})
+        except (OSError, TypeError, ValueError) as exc:
+            for field_name, value in original_settings.items():
+                setattr(settings, field_name, value)
             return self._dump({"ok": False, "error": str(exc)})
+
+    def _on_book_reparse_finished(self, message: str) -> None:
+        self.book_reparse_finished.emit(message)
+        self.data_changed.emit("books")
+
+    def _clear_reparse_worker(self) -> None:
+        self.reparse_worker = None
 
     def _on_job_progress(self, job: Any, segment: Any) -> None:
         """Route progress to the UI. Always go through the worker signal when one is

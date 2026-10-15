@@ -4,6 +4,7 @@ import asyncio
 import logging
 from typing import Any, Callable, Coroutine
 from PySide6.QtCore import QObject, QThread, Signal
+from bookbridge.documents.reparse import reparse_books
 from bookbridge.models.job import TranslationJob, Segment
 
 logger = logging.getLogger(__name__)
@@ -34,3 +35,33 @@ class AsyncWorker(QThread):
             self.finished_signal.emit(False, str(ex))
         finally:
             self._loop.close()
+
+
+class BookReparseWorker(QThread):
+    completed = Signal(str)
+
+    def __init__(
+        self,
+        book_ids: list[str],
+        epub_granularity: str,
+        pdf_granularity: str,
+    ):
+        super().__init__()
+        self.book_ids = book_ids
+        self.epub_granularity = epub_granularity
+        self.pdf_granularity = pdf_granularity
+
+    def run(self) -> None:
+        try:
+            updated_count, errors = reparse_books(
+                self.book_ids,
+                self.epub_granularity,
+                self.pdf_granularity,
+            )
+            message = f"Updated blocks for {updated_count} existing book(s)."
+            if errors:
+                message += " Could not update: " + "; ".join(errors)
+            self.completed.emit(message)
+        except Exception as exc:
+            logger.exception("Background book reparse failed")
+            self.completed.emit(f"Could not update existing books: {exc}")

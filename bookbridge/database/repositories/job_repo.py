@@ -307,3 +307,38 @@ class JobRepository:
             for s in all_segs
             if s.status in (SegmentStatus.PENDING, SegmentStatus.FAILED, SegmentStatus.NEEDS_REVIEW)
         ]
+
+    def reset_incomplete_jobs_for_book(self, book_id: str) -> None:
+        """Discard stale segments for resumable jobs after a book's blocks change."""
+        with db.session() as conn:
+            conn.execute(
+                """
+                DELETE FROM segments
+                WHERE job_id IN (
+                    SELECT id FROM translation_jobs
+                    WHERE book_id = ? AND status != ?
+                );
+                """,
+                (book_id, JobStatus.COMPLETED.value),
+            )
+            conn.execute(
+                """
+                UPDATE translation_jobs SET
+                    status = ?,
+                    total_chapters = 0,
+                    completed_chapters = 0,
+                    current_chapter_title = '',
+                    total_segments = 0,
+                    completed_segments = 0,
+                    cached_segments = 0,
+                    failed_segments = 0,
+                    retried_segments = 0,
+                    total_tokens_used = 0,
+                    error_message = NULL,
+                    started_at = NULL,
+                    finished_at = NULL,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE book_id = ? AND status != ?;
+                """,
+                (JobStatus.QUEUED.value, book_id, JobStatus.COMPLETED.value),
+            )

@@ -84,6 +84,8 @@ Run `python -m bookbridge.app` for the desktop application. Do not open `bookbri
 2. Select or create a glossary profile (e.g., click **+ Add Xianxia / Web Novel Preset**).
 3. Add custom character names, terms, or techniques.
 
+Use **Settings** to choose EPUB block granularity (**Paragraph** or **Chapter**) and PDF block granularity (**Paragraph** or **Page**). Changing either option updates already imported books in the background; unchanged blocks keep their translations, and unfinished jobs for updated books are reset for safe re-segmentation.
+
 ### Step 4: Preview & Translate
 1. Click **🌐 Translation Studio**.
 2. Select your imported book, translation style (e.g., *Natural Arabic* or *Web Novel Arabic*), and glossary.

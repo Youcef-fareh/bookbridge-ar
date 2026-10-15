@@ -459,6 +459,8 @@ body.modal-open .main{
   <div class="page-head"><div><h1 class="page-title">Application Settings &amp; Paths</h1><p class="page-sub">Local output paths and translation pipeline tuning.</p></div></div>
   <div class="card set-card">
     <div class="set-row"><div class="sl">Default Export Directory<small>exports, cache, logs &amp; vault live under this root</small></div><div class="sc"><input class="input" id="setDir"><button class="btn btn-sec" id="btnBrowse"><svg class="ic"><use href="#i-folder"/></svg> Browse…</button></div></div>
+    <div class="set-row"><div class="sl">EPUB Block Granularity<small>existing EPUB books are updated in the background</small></div><div class="sc"><select class="input" id="setEpubGranularity" style="max-width:220px"><option value="paragraph">Paragraph</option><option value="chapter">Chapter</option></select></div></div>
+    <div class="set-row"><div class="sl">PDF Block Granularity<small>existing PDF books are updated in the background</small></div><div class="sc"><select class="input" id="setPdfGranularity" style="max-width:220px"><option value="paragraph">Paragraph</option><option value="page">Page</option></select></div></div>
     <div class="set-row"><div class="sl">Max Segment Characters<small>chunk size · 200 – 5000</small></div><div class="sc"><input class="input" type="number" id="setChunk" min="200" max="5000" style="max-width:140px"></div></div>
     <div class="set-row"><div class="sl">Context Window<small>surrounding blocks · 0 – 10</small></div><div class="sc"><input class="input" type="number" id="setCtx" min="0" max="10" style="max-width:140px"></div></div>
     <div class="set-row"><div class="sl">Max Validation Retries<small>0 – 5</small></div><div class="sc"><input class="input" type="number" id="setRetry" min="0" max="5" style="max-width:140px"></div></div>
@@ -537,7 +539,7 @@ const state={
  books:[], jobs:[],
  selBook:null, expanded:new Set(),
  profiles:[], activeProfile:null, glossSearch:'', providers:backendProviderState([],[]),
- job:null, settings:{dir:'',chunk:1200,ctx:2,retry:2,cool:0.05}
+ job:null, settings:{dir:'',chunk:1200,ctx:2,epub_granularity:'paragraph',pdf_granularity:'paragraph',retry:2,cool:0.05}
 };
 function syncStrategies(){
  const select=$('#cfgStrat'), current=select.value;
@@ -1068,6 +1070,8 @@ $('#btnAddKey').onclick=()=>{
 /* ================= settings ================= */
 function renderSettings(){
  $('#setDir').value=state.settings.dir;$('#setChunk').value=state.settings.chunk;
+ $('#setEpubGranularity').value=state.settings.epub_granularity||'paragraph';
+ $('#setPdfGranularity').value=state.settings.pdf_granularity||'paragraph';
  $('#setCtx').value=state.settings.ctx;$('#setRetry').value=state.settings.retry;$('#setCool').value=state.settings.cool.toFixed(2);
 }
 $('#btnBrowse').onclick=()=>{
@@ -1098,16 +1102,18 @@ $('#btnSaveSet').onclick=()=>{
  const coolVal = isNaN(rawCool) ? 0.05 : Math.max(0, Math.min(60, rawCool));
  const ctxVal = Math.max(0, Math.min(10, parseInt($('#setCtx').value, 10) || 0));
  const retryVal = Math.max(0, Math.min(5, parseInt($('#setRetry').value, 10) || 0));
+ const epubGranularity = $('#setEpubGranularity').value;
+ const pdfGranularity = $('#setPdfGranularity').value;
  const saveBtn = $('#btnSaveSet');
  saveBtn.disabled = true;
  if(bookBridge){
-  bookBridge.save_settings(dir,chunk,ctxVal,retryVal,coolVal,raw=>{
+  bookBridge.save_settings(dir,chunk,ctxVal,retryVal,coolVal,epubGranularity,pdfGranularity,raw=>{
    saveBtn.disabled = false;
    try {
     const result=JSON.parse(raw);
     if(!result.ok){msg.className='warn';msg.textContent=result.error;return}
-    Object.assign(state.settings,{dir,chunk,ctx:ctxVal,retry:retryVal,cool:coolVal});
-    msg.className='ok';msg.textContent='Settings updated successfully.';toast('Settings saved.');
+    Object.assign(state.settings,{dir,chunk,ctx:ctxVal,epub_granularity:epubGranularity,pdf_granularity:pdfGranularity,retry:retryVal,cool:coolVal});
+    msg.className='ok';msg.textContent=result.reparsing?'Settings saved. Updating existing books in the background…':'Settings updated successfully.';toast('Settings saved.');
     refreshBackend();
    } catch(e) {
     msg.className='warn';msg.textContent='Failed to parse response.';
@@ -1115,7 +1121,7 @@ $('#btnSaveSet').onclick=()=>{
   });
   return;
  }
- Object.assign(state.settings,{dir,chunk,ctx:ctxVal,retry:retryVal,cool:coolVal});
+ Object.assign(state.settings,{dir,chunk,ctx:ctxVal,epub_granularity:epubGranularity,pdf_granularity:pdfGranularity,retry:retryVal,cool:coolVal});
  saveBtn.disabled = false;
  msg.className='ok';msg.textContent='Settings updated successfully.';
  toast('Settings saved — exports, cache, logs and vault verified.');
@@ -1196,6 +1202,12 @@ function connectBackend(){
     setStatusMsg('Translation stopped: '+(message||'Allowed attempts reached'),'warn');
     infoBox('Translation Stopped',esc(message||'The translation stopped after the allowed attempts.'),'err');
    }
+  });
+  bookBridge.book_reparse_finished.connect(message=>{
+   const msg=$('#setMsg');
+   const failed=message.includes('Could not update');
+   msg.className=failed?'warn':'ok';msg.textContent=message;
+   toast(message,failed?'warn':'');
   });
   bookBridge.data_changed.connect(()=>refreshBackend());
   refreshBackend();

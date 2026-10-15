@@ -1,6 +1,6 @@
 [Setup]
 AppName=BookBridge
-AppVersion=1.0.9
+AppVersion=1.1.0
 AppId=BookBridge
 AppPublisher=BookBridge
 AppPublisherURL=https://github.com/Youcef-fareh/bookbridge-ar

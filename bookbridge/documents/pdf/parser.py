@@ -2,8 +2,10 @@
 
 import logging
 from pathlib import Path
+from typing import Optional
 import pymupdf as fitz
 from bookbridge.config.constants import BlockType
+from bookbridge.config.settings import settings
 from bookbridge.documents.base import DocumentParser
 from bookbridge.models.book import (
     Book,
@@ -18,8 +20,12 @@ logger = logging.getLogger(__name__)
 
 
 class PdfParser(DocumentParser):
+    def __init__(self, granularity: Optional[str] = None):
+        self.granularity = granularity
+
     def parse(self, file_path: Path) -> Book:
         logger.info(f"Parsing PDF document: {file_path}")
+        granularity = self.granularity or settings.pdf_block_granularity
         doc = None
         try:
             doc = fitz.open(str(file_path))
@@ -160,6 +166,20 @@ class PdfParser(DocumentParser):
                     #         continue
                 except Exception as e:
                     logger.warning(f"Failed to check images on page {page_num + 1}: {str(e)}")
+
+                if granularity == "page" and chapter.blocks:
+                    chapter.blocks = [
+                        Block(
+                            chapter_id=chapter.id,
+                            type=BlockType.PARAGRAPH,
+                            source_text="\n\n".join(block.source_text.strip() for block in chapter.blocks),
+                            order_index=0,
+                            source_location=SourceLocation(
+                                page_number=page_num + 1,
+                            ),
+                            is_translatable=True,
+                        )
+                    ]
 
                 if chapter.blocks:
                     book.chapters.append(chapter)

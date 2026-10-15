@@ -124,6 +124,36 @@ class BookRepository:
                         ),
                     )
 
+    def replace_book(self, book: Book) -> None:
+        """Replace a parsed book's chapters, blocks, and resources without stale rows."""
+        self.save_book(book)
+        chapter_ids = {chapter.id for chapter in book.chapters}
+        block_ids = {block.id for chapter in book.chapters for block in chapter.blocks}
+        resource_ids = set(book.resources)
+
+        with db.session() as conn:
+            existing_chapters = conn.execute(
+                "SELECT id FROM chapters WHERE book_id = ?", (book.id,)
+            ).fetchall()
+            for row in existing_chapters:
+                chapter_id = row["id"]
+                if chapter_id not in chapter_ids:
+                    conn.execute("DELETE FROM chapters WHERE id = ?", (chapter_id,))
+                    continue
+                existing_blocks = conn.execute(
+                    "SELECT id FROM blocks WHERE chapter_id = ?", (chapter_id,)
+                ).fetchall()
+                for block_row in existing_blocks:
+                    if block_row["id"] not in block_ids:
+                        conn.execute("DELETE FROM blocks WHERE id = ?", (block_row["id"],))
+
+            existing_resources = conn.execute(
+                "SELECT id FROM resources WHERE book_id = ?", (book.id,)
+            ).fetchall()
+            for row in existing_resources:
+                if row["id"] not in resource_ids:
+                    conn.execute("DELETE FROM resources WHERE id = ?", (row["id"],))
+
     def get_book(self, book_id: str, load_data: bool = True) -> Optional[Book]:
         conn = db.get_connection()
         c = conn.cursor()

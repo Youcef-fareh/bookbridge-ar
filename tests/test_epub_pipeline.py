@@ -107,6 +107,21 @@ def test_epub_roundtrip_pipeline(tmp_path: Path):
     assert len(exported_images[0].get_content()) > 0
 
 
+def test_epub_chapter_granularity_combines_translatable_blocks(tmp_path: Path):
+    source_path = tmp_path / "chapter_granularity.epub"
+    create_sample_epub(source_path)
+
+    book = EpubParser(granularity="chapter").parse(source_path)
+
+    assert len(book.chapters) == 2
+    for chapter in book.chapters:
+        text_blocks = [block for block in chapter.blocks if block.has_translatable_text]
+        assert len(text_blocks) == 1
+    assert "The water flowed through the valley silently." in book.chapters[0].blocks[0].source_text
+    assert "A journey of a thousand li begins beneath one's feet." in book.chapters[0].blocks[0].source_text
+    assert len(book.resources) == 1
+
+
 def test_epub_renderer_removes_xml_forbidden_control_characters(tmp_path: Path):
     book = Book(
         metadata=BookMetadata(
