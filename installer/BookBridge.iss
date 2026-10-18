@@ -1,6 +1,10 @@
+#ifndef AppVersion
+	#define AppVersion "1.2.0"
+#endif
+
 [Setup]
 AppName=BookBridge
-AppVersion=1.1.0
+AppVersion={#AppVersion}
 AppId=BookBridge
 AppPublisher=BookBridge
 AppPublisherURL=https://github.com/Youcef-fareh/bookbridge-ar

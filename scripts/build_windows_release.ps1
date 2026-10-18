@@ -1,6 +1,6 @@
 Param(
     [string]$Python = "python",
-    [string]$Version = "1.0.0"
+    [string]$Version = "1.2.0"
 )
 
 $ErrorActionPreference = "Stop"
@@ -25,6 +25,6 @@ if (-not (Get-Command "ISCC.exe" -ErrorAction SilentlyContinue) -and -not (Test-
 New-Item -ItemType Directory -Force -Path "$Root\dist\installer" | Out-Null
 $iscc = (Get-Command "ISCC.exe" -ErrorAction SilentlyContinue).Source
 if (-not $iscc) { $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" }
-& $iscc "$Root\installer\BookBridge.iss"
+& $iscc "/DAppVersion=$Version" "$Root\installer\BookBridge.iss"
 
 Write-Host "[4/4] Finished. Installer is in $Root\dist\installer\BookBridge-Setup.exe"
