@@ -29,28 +29,11 @@ jobs:
           pip install -r requirements.txt
           pip install pyinstaller==6.10.0
 
-      - name: Build EXE
+      - name: Build Application Package
         shell: powershell
         run: |
           New-Item -ItemType Directory -Force -Path .\dist\app | Out-Null
-          if (Test-Path .\icon.ico) {
-            pyinstaller --noconfirm --clean --onefile --windowed --name BookBridge `
-              --icon .\icon.ico `
-              --manifest .\installer\BookBridge.manifest `
-              --add-data "README.md;." `
-              --add-data "bookbridge.html;." `
-              --add-data "sample_data;sample_data" `
-              --distpath .\dist\app `
-              .\bookbridge\app.py
-          } else {
-            pyinstaller --noconfirm --clean --onefile --windowed --name BookBridge `
-              --manifest .\installer\BookBridge.manifest `
-              --add-data "README.md;." `
-              --add-data "bookbridge.html;." `
-              --add-data "sample_data;sample_data" `
-              --distpath .\dist\app `
-              .\bookbridge\app.py
-          }
+          pyinstaller --noconfirm --clean .\BookBridge.spec --distpath .\dist\app
 
       - name: Install Inno Setup
         shell: powershell

@@ -8,8 +8,11 @@ AppSupportURL=https://github.com/Youcef-fareh/bookbridge-ar
 AppUpdatesURL=https://github.com/Youcef-fareh/bookbridge-ar
 DefaultDirName={autopf}\BookBridge
 DefaultGroupName=BookBridge
-Compression=lzma
+Compression=lzma2/ultra64
 SolidCompression=yes
+LZMAUseSeparateProcess=yes
+LZMADictionarySize=1048576
+LZMANumFastBytes=273
 OutputDir=..\dist\installer
 OutputBaseFilename=BookBridge-Setup
 PrivilegesRequired=admin
@@ -26,7 +29,7 @@ WizardStyle=modern
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Files]
-Source: "..\dist\app\BookBridge.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\dist\app\BookBridge\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "..\README.md"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\sample_data\*"; DestDir: "{app}\sample_data"; Flags: recursesubdirs createallsubdirs ignoreversion
 
