@@ -9,11 +9,13 @@ from bookbridge.config.settings import settings
 
 
 class DatabaseManager:
-    _local = threading.local()
-
     def __init__(self, db_path: Optional[Path] = None):
         self.db_path = db_path or settings.db_path
         self._lock = threading.Lock()
+        # Thread-local connections must belong to this manager, not the class.
+        # A class-level threading.local() is shared by every instance, so two
+        # managers in the same thread would incorrectly reuse one connection.
+        self._local = threading.local()
 
     def get_connection(self) -> sqlite3.Connection:
         """Get or create a thread-local SQLite connection."""

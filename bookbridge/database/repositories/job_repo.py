@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 import json
-from typing import List, Optional
+from typing import Dict, List, Optional, Tuple
 from bookbridge.database.connection import db
 from bookbridge.models.job import TranslationJob, Segment
 from bookbridge.config.constants import JobStatus, SegmentStatus, TranslationStyleType
@@ -146,6 +146,7 @@ class JobRepository:
         total_tokens_used: int,
         completed_chapters: int,
         current_chapter_title: str,
+        total_segments: Optional[int] = None,
     ) -> None:
         with db.session() as conn:
             conn.execute(
@@ -158,6 +159,7 @@ class JobRepository:
                     total_tokens_used = ?,
                     completed_chapters = ?,
                     current_chapter_title = ?,
+                    total_segments = COALESCE(?, total_segments),
                     updated_at = CURRENT_TIMESTAMP
                 WHERE id = ?;
                 """,
@@ -169,6 +171,7 @@ class JobRepository:
                     total_tokens_used,
                     completed_chapters,
                     current_chapter_title,
+                    total_segments,
                     job_id,
                 ),
             )
@@ -185,6 +188,92 @@ class JobRepository:
         c = conn.cursor()
         c.execute("SELECT * FROM translation_jobs ORDER BY updated_at DESC LIMIT ?", (limit,))
         return [_row_to_job(row) for row in c.fetchall()]
+
+    def recover_orphaned_jobs(self) -> int:
+        """Mark jobs left running/queued by a previous session as resumable.
+
+        A crash or forced process exit cannot update the job row. Without this,
+        the UI would show a permanently "running" job that has no worker behind
+        it and would disable both Start and Resume.
+        """
+        with db.session() as conn:
+            cursor = conn.execute(
+                """
+                UPDATE translation_jobs SET
+                    status = ?,
+                    error_message = 'Interrupted by the previous application session. Resume to continue.',
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE status IN (?, ?);
+                """,
+                (
+                    JobStatus.PAUSED.value,
+                    JobStatus.RUNNING.value,
+                    JobStatus.QUEUED.value,
+                ),
+            )
+            return cursor.rowcount
+
+    def get_latest_resumable_job_for_book(self, book_id: str) -> Optional[TranslationJob]:
+        """Return the newest paused/incomplete job for a book.
+
+        Looking only at the newest job would miss an older paused job when the
+        user has already retranslated the book once.
+        """
+        conn = db.get_connection()
+        c = conn.cursor()
+        c.execute(
+            """
+            SELECT * FROM translation_jobs
+            WHERE book_id = ?
+              AND status IN ('paused', 'cancelled', 'needs_review', 'failed')
+            ORDER BY updated_at DESC
+            LIMIT 1
+            """,
+            (book_id,),
+        )
+        row = c.fetchone()
+        return _row_to_job(row) if row else None
+
+    def get_provider_models(self, job_ids: List[str]) -> Dict[str, Tuple[str, str]]:
+        """Return the provider/model actually used last for each job.
+
+        Provider and model live on segments rather than jobs, so the jobs list
+        needs a small lookup to avoid showing blank values after a refresh.
+        """
+        if not job_ids:
+            return {}
+        placeholders = ",".join("?" for _ in job_ids)
+        conn = db.get_connection()
+        c = conn.cursor()
+        c.execute(
+            f"""
+            SELECT job_id, provider_used, model_used, translated_at
+            FROM segments
+            WHERE job_id IN ({placeholders})
+              AND (provider_used IS NOT NULL OR model_used IS NOT NULL)
+            ORDER BY COALESCE(translated_at, '') ASC, rowid ASC
+            """,
+            job_ids,
+        )
+        result: Dict[str, Tuple[str, str]] = {}
+        for row in c.fetchall():
+            result[row["job_id"]] = (
+                row["provider_used"] or "",
+                row["model_used"] or "",
+            )
+        return result
+
+    def clear_job_error(self, job_id: str) -> None:
+        """Clear a previous failure message when a job is resumed."""
+        with db.session() as conn:
+            conn.execute(
+                """
+                UPDATE translation_jobs
+                SET error_message = NULL, updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?;
+                """,
+                (job_id,),
+            )
 
     def save_segments(self, segments: List[Segment]) -> None:
         with db.session() as conn:
@@ -309,7 +398,11 @@ class JobRepository:
         ]
 
     def reset_incomplete_jobs_for_book(self, book_id: str) -> None:
-        """Discard stale segments for resumable jobs after a book's blocks change."""
+        """Discard stale segments for resumable jobs after a book's blocks change.
+
+        The job is marked PAUSED rather than QUEUED: it has no worker behind it,
+        so Resume must remain available after the reparse finishes.
+        """
         with db.session() as conn:
             conn.execute(
                 """
@@ -340,5 +433,5 @@ class JobRepository:
                     updated_at = CURRENT_TIMESTAMP
                 WHERE book_id = ? AND status != ?;
                 """,
-                (JobStatus.QUEUED.value, book_id, JobStatus.COMPLETED.value),
+                (JobStatus.PAUSED.value, book_id, JobStatus.COMPLETED.value),
             )

@@ -67,7 +67,7 @@ def test_reparse_updates_saved_book_and_resets_incomplete_jobs(tmp_path):
     assert len(updated.chapters[0].blocks) == 1
     assert updated.chapters[0].blocks[0].type.value == "paragraph"
     assert reset_job is not None
-    assert reset_job.status == JobStatus.QUEUED
+    assert reset_job.status == JobStatus.PAUSED
     assert reset_job.total_segments == 0
     assert job_repo.get_job_segments(job.id) == []
 

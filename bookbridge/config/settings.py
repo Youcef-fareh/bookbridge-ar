@@ -14,7 +14,7 @@ class AppSettings(BaseModel):
     model_config = ConfigDict(validate_assignment=True)
 
     app_name: str = "BookBridge"
-    version: str = "1.1.0"
+    version: str = "1.2.1"
     data_dir: Path = Field(default_factory=lambda: Path(os.getenv("BOOKBRIDGE_DATA_DIR", Path.home() / ".bookbridge")))
     export_directory: Optional[Path] = None
     db_filename: str = "bookbridge.db"

@@ -122,7 +122,7 @@ class EpubRenderer(DocumentRenderer):
             if res.data:
                 img_item = epub.EpubItem(
                     uid=res.id,
-                    file_name=res.file_name if not res.file_name.startswith("images/") else res.file_name,
+                    file_name=res.file_name,
                     media_type=res.media_type,
                     content=res.data,
                 )

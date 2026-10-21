@@ -59,6 +59,16 @@ class JobRunner:
         self._is_cancelled = True
         logger.info("Translation job cancel requested.")
 
+    def reset_control(self) -> None:
+        """Clear pause/cancel flags before starting a brand-new worker.
+
+        This is deliberately called by the bridge before ``QThread.start``,
+        not inside the worker: a cancel clicked while the job is still QUEUED
+        must not be erased when the worker thread begins executing.
+        """
+        self._is_paused = False
+        self._is_cancelled = False
+
     # -------------------------------------------------------------------------
     # Private helpers
     # -------------------------------------------------------------------------
@@ -67,6 +77,43 @@ class JobRunner:
         """Fire the progress callback if one is registered."""
         if self._on_progress_callback:
             self._on_progress_callback(job, segment)
+
+    @staticmethod
+    def _sync_job_counters(job: TranslationJob, segments: list[Segment]) -> None:
+        """Recompute counters from segment state.
+
+        Resumed jobs can have a segment that failed in an earlier run. Simply
+        incrementing ``completed_segments`` while leaving ``failed_segments``
+        untouched makes a fully successful resume look like a failure forever.
+        """
+        job.total_segments = len(segments)
+        job.completed_segments = sum(
+            1
+            for segment in segments
+            if segment.status in (SegmentStatus.TRANSLATED, SegmentStatus.CACHED)
+        )
+        job.cached_segments = sum(
+            1 for segment in segments if segment.status == SegmentStatus.CACHED
+        )
+        job.failed_segments = sum(
+            1
+            for segment in segments
+            if segment.status in (SegmentStatus.FAILED, SegmentStatus.NEEDS_REVIEW)
+        )
+        job.total_tokens_used = sum(segment.tokens_used for segment in segments)
+
+    def _persist_progress(self, job: TranslationJob) -> None:
+        self.job_repo.update_job_progress(
+            job_id=job.id,
+            completed_segments=job.completed_segments,
+            cached_segments=job.cached_segments,
+            failed_segments=job.failed_segments,
+            retried_segments=job.retried_segments,
+            total_tokens_used=job.total_tokens_used,
+            completed_chapters=job.completed_chapters,
+            current_chapter_title=job.current_chapter_title,
+            total_segments=job.total_segments,
+        )
 
     def _set_status(
         self,
@@ -86,6 +133,33 @@ class JobRunner:
     # -------------------------------------------------------------------------
 
     async def run_job(self, job_id: str) -> bool:
+        """Execute or resume a translation job.
+
+        Unexpected exceptions are logged with a traceback and persisted as a
+        failed job instead of leaving the UI stuck on "running" forever.
+        """
+        try:
+            return await self._run_job(job_id)
+        except asyncio.CancelledError:
+            logger.warning("Job %s was cancelled at the asyncio level.", job_id)
+            raise
+        except Exception as exc:
+            logger.exception("Job %s crashed unexpectedly.", job_id)
+            try:
+                job = self.job_repo.get_job(job_id)
+                if job:
+                    self._set_status(
+                        job,
+                        JobStatus.FAILED,
+                        f"Unexpected error: {exc}",
+                        finished=True,
+                    )
+                    self._notify(job)
+            except Exception:
+                logger.exception("Could not mark job %s as failed.", job_id)
+            return False
+
+    async def _run_job(self, job_id: str) -> bool:
         """Executes or resumes a translation job. Returns True on full success."""
         job = self.job_repo.get_job(job_id)
         if not job:
@@ -93,8 +167,20 @@ class JobRunner:
             return False
 
         self._active_job_id = job_id
-        self._is_paused = False
-        self._is_cancelled = False
+        logger.info(
+            "Starting job %s for book '%s' (id=%s, style=%s, glossary=%s, strategy=%s).",
+            job.id,
+            job.book_title,
+            job.book_id,
+            job.style.value,
+            job.glossary_profile_id or "none",
+            (job.custom_settings or {}).get("strategy", "auto"),
+        )
+
+        if self._is_cancelled:
+            self._set_status(job, JobStatus.CANCELLED)
+            self._notify(job)
+            return False
 
         # Load book
         book = self.book_repo.get_book(job.book_id)
@@ -113,6 +199,20 @@ class JobRunner:
         # are sorted and compiled once rather than on every segment call.
         glossary_engine = GlossaryEngine(glossary_profile)
 
+        # A resumed job is working immediately, including while it rebuilds
+        # segments. Do not leave it looking PAUSED (which would offer Resume
+        # again) for the whole segmentation pass on a large book.
+        if job.status in (
+            JobStatus.PAUSED,
+            JobStatus.CANCELLED,
+            JobStatus.NEEDS_REVIEW,
+            JobStatus.FAILED,
+        ):
+            self.job_repo.clear_job_error(job_id)
+            job.error_message = None
+            self._set_status(job, JobStatus.RUNNING)
+            self._notify(job)
+
         # Determine preferred provider from job's custom_settings (set by UI)
         strategy = job.custom_settings.get("strategy") if job.custom_settings else None
         preferred_provider: Optional[ProviderType | str] = None
@@ -130,13 +230,38 @@ class JobRunner:
                 max_chars=settings.max_segment_chars,
                 context_blocks_count=settings.context_window_blocks,
             )
-            logger.info("Generating semantic segments for book...")
+            logger.info(
+                "Generating semantic segments for '%s' (%d chapters)...",
+                job.book_title,
+                len(book.chapters),
+            )
             all_segments: list[Segment] = []
             order_counter = 0
-            for ch in book.chapters:
+            chapter_total = max(1, len(book.chapters))
+            for chapter_index, ch in enumerate(book.chapters, start=1):
+                if self._is_cancelled:
+                    # Do not persist a partially segmented book: resuming a
+                    # job with only the first N chapters would silently skip
+                    # the rest of the book.
+                    logger.info("Job %s cancelled during segmentation.", job.id)
+                    self._set_status(job, JobStatus.CANCELLED)
+                    self._notify(job)
+                    return False
                 ch_segs = self.segmenter.segment_chapter(ch, job_id, start_order_index=order_counter)
                 order_counter += len(ch_segs)
                 all_segments.extend(ch_segs)
+                # Give the UI something to show while long books are segmented.
+                job.total_chapters = len(book.chapters)
+                job.total_segments = len(all_segments)
+                job.current_chapter_title = ch.title
+                if chapter_index == len(book.chapters) or chapter_index % 5 == 0:
+                    self._notify(job)
+                    logger.info(
+                        "Segmentation progress: %d/%d chapters, %d segments.",
+                        chapter_index,
+                        chapter_total,
+                        len(all_segments),
+                    )
 
             self.job_repo.save_segments(all_segments)
             existing_segments = all_segments
@@ -145,9 +270,34 @@ class JobRunner:
             job.total_segments = len(all_segments)
             job.started_at = datetime.now(timezone.utc)
             self.job_repo.create_job(job)
+            logger.info(
+                "Job %s segmented into %d segment(s) across %d chapter(s).",
+                job.id,
+                len(all_segments),
+                len(book.chapters),
+            )
             self._notify(job)
 
+        # Resuming an earlier job: rebuild counters from the persisted segment
+        # states instead of trusting an older, possibly stale job row.
+        job.total_chapters = len(book.chapters)
+        self._sync_job_counters(job, existing_segments)
+        self.job_repo.clear_job_error(job_id)
+        job.error_message = None
+        self._persist_progress(job)
+
         self._set_status(job, JobStatus.RUNNING)
+        self._notify(job)
+        logger.info(
+            "Job %s running: %d segment(s), %d already done.",
+            job.id,
+            len(existing_segments),
+            sum(
+                1
+                for item in existing_segments
+                if item.status in (SegmentStatus.TRANSLATED, SegmentStatus.CACHED)
+            ),
+        )
 
         # ------------------------------------------------------------------ #
         # Main translation loop                                                #
@@ -172,6 +322,7 @@ class JobRunner:
                         return False
                 # Resumed — restore RUNNING status
                 self._set_status(job, JobStatus.RUNNING)
+                self._notify(job)
 
             # Skip already completed segments (resume functionality)
             if segment.status in (SegmentStatus.TRANSLATED, SegmentStatus.CACHED):
@@ -186,8 +337,18 @@ class JobRunner:
             ctx_before, ctx_after = self.segmenter.compute_context(existing_segments, idx)
 
             # Mark segment as in-flight
+            previous_status = segment.status
             segment.status = SegmentStatus.TRANSLATING
             self.job_repo.update_segment(segment)
+            logger.debug(
+                "Job %s: segment %d/%d order=%d chapter=%r chars=%d",
+                job.id,
+                idx + 1,
+                len(existing_segments),
+                segment.order_index,
+                job.current_chapter_title,
+                len(segment.source_text),
+            )
 
             result = await self.pipeline.translate_segment(
                 segment=segment,
@@ -223,16 +384,36 @@ class JobRunner:
                 segment.translated_at = datetime.now(timezone.utc)
 
                 job.completed_segments += 1
+                if previous_status in (SegmentStatus.FAILED, SegmentStatus.NEEDS_REVIEW):
+                    # This segment was counted as failed by an earlier run.
+                    job.failed_segments = max(0, job.failed_segments - 1)
                 if result.cached:
                     job.cached_segments += 1
                 job.total_tokens_used += result.tokens_used
 
                 for b_id in segment.block_ids:
                     self.book_repo.update_block_translation(b_id, result.translated_text)
+                logger.info(
+                    "Job %s: segment %d/%d translated%s via %s/%s (%d tokens).",
+                    job.id,
+                    idx + 1,
+                    len(existing_segments),
+                    " from cache" if result.cached else "",
+                    result.provider or "unknown",
+                    result.model or "unknown",
+                    result.tokens_used,
+                )
             else:
                 segment.status = SegmentStatus.FAILED
                 segment.error_message = result.error
                 job.failed_segments += 1
+                logger.error(
+                    "Job %s: segment %d/%d FAILED after retries: %s",
+                    job.id,
+                    idx + 1,
+                    len(existing_segments),
+                    result.error or "unknown provider error",
+                )
 
             # Persist segment and progress together
             self.job_repo.update_segment(segment)
@@ -266,15 +447,27 @@ class JobRunner:
         # ------------------------------------------------------------------ #
         # Post-loop outcome                                                    #
         # ------------------------------------------------------------------ #
+        # Recompute from segment state so a successful resume clears failures
+        # from the previous run, even if a counter was left stale in SQLite.
+        self._sync_job_counters(job, existing_segments)
+        self._persist_progress(job)
         if job.failed_segments:
             message = (
                 f"Translation finished with {job.failed_segments} failed segment(s). "
                 "Resolve provider errors and resume the job."
             )
+            logger.warning("Job %s needs review: %s", job.id, message)
             self._set_status(job, JobStatus.NEEDS_REVIEW, message)
             self._notify(job)
             return False
 
+        logger.info(
+            "Job %s completed: %d segment(s), %d cached, %d tokens.",
+            job.id,
+            job.completed_segments,
+            job.cached_segments,
+            job.total_tokens_used,
+        )
         self._set_status(job, JobStatus.COMPLETED, finished=True)
         self._notify(job)
         return True

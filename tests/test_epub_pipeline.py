@@ -72,8 +72,8 @@ def test_epub_roundtrip_pipeline(tmp_path: Path):
     sample_epub_path = tmp_path / "sample_source.epub"
     create_sample_epub(sample_epub_path)
 
-    # 1. Parse EPUB
-    parser = EpubParser()
+    # 1. Parse EPUB (pin paragraph granularity; user settings may differ)
+    parser = EpubParser(granularity="paragraph")
     book_model = parser.parse(sample_epub_path)
 
     assert book_model.metadata.title == "The Chronicles of Cultivation"

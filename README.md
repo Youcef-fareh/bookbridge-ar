@@ -99,6 +99,22 @@ Use **Settings** to choose EPUB block granularity (**Paragraph** or **Chapter**)
 
 ---
 
+## Troubleshooting & Logs
+
+BookBridge records every run to rotating log files so a problem can be diagnosed after the fact.
+
+- Open **🖥 Logs & Diagnostics** in the app to read the live log with a level filter, auto-refresh, and **Open Log Folder**.
+- Default location: `%USERPROFILE%\.bookbridge\logs\`
+  - `bookbridge.log` — normal application activity (INFO and above)
+  - `errors.log` — warnings, errors, and full tracebacks
+- Set `BOOKBRIDGE_DATA_DIR` to move the whole data folder (and its `logs` directory) somewhere else.
+- Set `BOOKBRIDGE_LOG_LEVEL=DEBUG` before launching for verbose provider/pacing output.
+- The log includes Python crash tracebacks, Qt warnings, JavaScript console errors, job/segment progress, and credential/provider failures. Attach `errors.log` (or the relevant part of `bookbridge.log`) when reporting an issue.
+
+If a translation does not start, check the Logs & Diagnostics page first: rejected jobs (missing credentials, book not found, another job already running) are recorded with an explicit reason.
+
+---
+
 ## Project Architecture
 
 ```text

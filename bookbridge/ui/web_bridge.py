@@ -1,15 +1,19 @@
 """Qt WebChannel bridge between the HTML UI and BookBridge services."""
 
+import itertools
 import json
+import logging
 import uuid
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, List, Optional
 
-from PySide6.QtCore import QObject, Signal, Slot
+from PySide6.QtCore import QObject, QUrl, Signal, Slot
+from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import QFileDialog, QMessageBox, QWidget
 
 from bookbridge.config.constants import JobStatus, ProviderType, TranslationStyleType
 from bookbridge.config.settings import settings
+from bookbridge.logging_setup import get_error_log_path, get_log_path
 from bookbridge.database.repositories.book_repo import BookRepository
 from bookbridge.database.repositories.credential_repo import CredentialRepository
 from bookbridge.database.repositories.glossary_repo import GlossaryRepository
@@ -24,6 +28,52 @@ from bookbridge.models.provider import ProviderCredentialMetadata
 from bookbridge.models.provider_config import ProviderConfig
 from bookbridge.security.keyring_manager import keyring_manager
 from bookbridge.ui.async_worker import AsyncWorker, BookReparseWorker
+
+logger = logging.getLogger(__name__)
+
+_LEVEL_ORDER = ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")
+
+
+def _tail_lines(path: Path, max_lines: int, level: str = "") -> List[str]:
+    """Read log lines, optionally filtered by minimum level.
+
+    Continuation lines (tracebacks, wrapped messages) do not carry a
+    ``time | LEVEL | logger`` prefix. They must stay attached to the formatted
+    line they belong to, otherwise the default INFO view silently hides every
+    traceback. Rotated logs are capped at a few megabytes, so reading the whole
+    current file is cheap and also avoids missing an older error.
+    """
+    if not path.is_file():
+        return []
+    max_lines = max(1, min(max_lines, 5000))
+    threshold = None
+    if level:
+        try:
+            threshold = _LEVEL_ORDER.index(level.strip().upper())
+        except ValueError:
+            threshold = None
+
+    try:
+        lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        logger.exception("Could not read log file %s", path)
+        return []
+
+    if threshold is None:
+        return lines[-max_lines:]
+
+    filtered: List[str] = []
+    keep_continuations = False
+    for line in lines:
+        parts = line.split(" | ", 3)
+        if len(parts) >= 2 and parts[1].strip() in _LEVEL_ORDER:
+            keep_continuations = _LEVEL_ORDER.index(parts[1].strip()) >= threshold
+            if keep_continuations:
+                filtered.append(line)
+        elif keep_continuations:
+            # Traceback/context lines belonging to the last selected entry.
+            filtered.append(line)
+    return filtered[-max_lines:]
 
 
 class WebBridge(QObject):
@@ -40,10 +90,20 @@ class WebBridge(QObject):
         self.job_repo = JobRepository()
         self.cred_repo = CredentialRepository()
         self.glossary_repo = GlossaryRepository()
+        try:
+            recovered = self.job_repo.recover_orphaned_jobs()
+            if recovered:
+                logger.warning(
+                    "Marked %d interrupted translation job(s) as paused for resume.",
+                    recovered,
+                )
+        except Exception:
+            logger.exception("Could not recover interrupted translation jobs.")
         self.job_runner = JobRunner(self.job_repo, self.book_repo, self.glossary_repo)
         self.worker: Optional[AsyncWorker] = None
         self.reparse_worker: Optional[BookReparseWorker] = None
         self._job_id: Optional[str] = None
+        self._progress_seq = itertools.count(1)
         self.job_runner.set_progress_callback(self._on_job_progress)
 
     def _parent_widget(self) -> Optional[QWidget]:
@@ -55,6 +115,20 @@ class WebBridge(QObject):
         if hasattr(value, "model_dump"):
             value = value.model_dump(mode="json")
         return json.dumps(value, ensure_ascii=False, default=str)
+
+    def _book_summary_dict(self, book: Any) -> dict:
+        """Lightweight book entry for the library list.
+
+        Chapters/blocks are fetched on demand through ``get_book_details`` so a
+        refresh does not deserialize every book in the library.
+        """
+        return {
+            "id": book.id,
+            "title": book.metadata.title,
+            "author": book.metadata.author,
+            "format": book.source_format.upper(),
+            "chapters": [],
+        }
 
     def _book_dict(self, book: Any) -> dict:
         return {
@@ -79,7 +153,7 @@ class WebBridge(QObject):
             ],
         }
 
-    def _job_dict(self, job: Any) -> dict:
+    def _job_dict(self, job: Any, provider: str = "", model: str = "") -> dict:
         return {
             "id": job.id,
             "bookId": job.book_id,
@@ -92,20 +166,29 @@ class WebBridge(QObject):
             "tokens": job.total_tokens_used,
             "failures": job.failed_segments,
             "retries": job.retried_segments,
-            "provider": "",
-            "model": "",
+            "provider": provider,
+            "model": model,
+            "chapter": job.current_chapter_title or "",
+            "error": job.error_message or "",
             "updatedAt": str(job.updated_at),
         }
 
     @Slot(result=str)
     def get_state(self) -> str:
-        books = self.book_repo.list_books()
         jobs = self.job_repo.list_jobs(limit=50)
+        job_media = self.job_repo.get_provider_models([job.id for job in jobs])
         credentials = self.cred_repo.list_credentials()
         profiles = self.glossary_repo.list_profiles()
+        books = [
+            self._book_summary_dict(book)
+            for book in self.book_repo.list_books()
+        ]
         return self._dump({
-            "books": [self._book_dict(self.book_repo.get_book(b.id)) for b in books],
-            "jobs": [self._job_dict(job) for job in jobs],
+            "books": books,
+            "jobs": [
+                self._job_dict(job, *job_media.get(job.id, ("", "")))
+                for job in jobs
+            ],
             "credentials": [
                 {
                     "id": cred.id,
@@ -153,8 +236,26 @@ class WebBridge(QObject):
                 "retry": settings.max_validation_retries,
                 "cool": settings.normal_request_cooldown_seconds,
                 "providers": settings.provider_configs,
+                "log_dir": str(get_log_path().parent),
+                "log_path": str(get_log_path()),
+                "error_log_path": str(get_error_log_path()),
             },
         })
+
+    @Slot(str, result=str)
+    def get_book_details(self, book_id: str) -> str:
+        """Return chapters/blocks for one book, loaded only when inspected."""
+        book_id = (book_id or "").strip()
+        if not book_id:
+            return self._dump({"ok": False, "error": "No book selected."})
+        try:
+            book = self.book_repo.get_book(book_id)
+            if book is None:
+                return self._dump({"ok": False, "error": "Book not found."})
+            return self._dump({"ok": True, "book": self._book_dict(book)})
+        except Exception as exc:
+            logger.exception("Could not load details for book %s", book_id)
+            return self._dump({"ok": False, "error": f"Could not load the book: {exc}"})
 
     @Slot(str, str, str, str, result=str)
     def save_provider(self, provider_id: str, name: str, base_url: str, protocol: str) -> str:
@@ -216,11 +317,19 @@ class WebBridge(QObject):
             return self._dump({"cancelled": True})
         try:
             parser = EpubParser() if extension == "epub" else PdfParser()
+            logger.info("Importing %s book: %s", extension.upper(), file_path)
             book = parser.parse(Path(file_path))
             self.book_repo.save_book(book)
+            logger.info(
+                "Imported %s (%d chapters) from %s",
+                book.metadata.title,
+                len(book.chapters),
+                file_path,
+            )
             self.data_changed.emit("books")
             return self._dump({"ok": True, "book": self._book_dict(book)})
         except Exception as exc:
+            logger.exception("Book import failed for %s", file_path)
             return self._dump({"ok": False, "error": str(exc)})
 
     @Slot(result=str)
@@ -239,7 +348,6 @@ class WebBridge(QObject):
         self.data_changed.emit("books")
         return self._dump({"ok": True})
 
-    @Slot(str, str, str, result=str)
     @Slot(str, str, str, str, str, str, result=str)
     def create_job(
         self,
@@ -250,36 +358,170 @@ class WebBridge(QObject):
         strategy: str = "auto",
         model: str = "",
     ) -> str:
-        book = self.book_repo.get_book(book_id)
-        if not book:
-            return self._dump({"ok": False, "error": "Book not found."})
-        style_values = {
-            "Literary — Flowing Prose": TranslationStyleType.LITERARY,
-            "Faithful — Close to Source": TranslationStyleType.LITERAL,
-            "Xianxia — Genre Native": TranslationStyleType.WEB_NOVEL,
-            "Fast Draft — Speed First": TranslationStyleType.NATURAL,
-        }
-        custom_settings = {}
-        if strategy and strategy.strip():
-            custom_settings["strategy"] = strategy.strip()
-        if model and model.strip() and model != "No models configured":
-            custom_settings["preferred_model"] = model.strip()
-
-        job = TranslationJob(
-            book_id=book.id,
-            book_title=book.metadata.title,
-            output_format=output_format.lower(),
-            style=style_values.get(style, TranslationStyleType.NATURAL),
-            glossary_profile_id=glossary_id.strip() if glossary_id and glossary_id.strip() else None,
-            custom_settings=custom_settings,
+        """Create a translation job and run it on a background thread."""
+        book_id = (book_id or "").strip()
+        logger.info(
+            "Translation requested: book=%r format=%r style=%r glossary=%r strategy=%r model=%r",
+            book_id,
+            output_format,
+            style,
+            glossary_id,
+            strategy,
+            model,
         )
-        self.job_repo.create_job(job)
-        self._job_id = job.id
-        self.worker = AsyncWorker(lambda: self.job_runner.run_job(job.id))
-        self.worker.progress_signal.connect(self._on_worker_progress)
-        self.worker.finished_signal.connect(self._on_worker_finished)
-        self.worker.start()
-        return self._dump({"ok": True, "job": self._job_dict(job)})
+        if self.worker is not None:
+            if self.worker.isRunning():
+                message = "A translation job is already running. Wait for it to finish or cancel it first."
+            else:
+                message = "The previous translation is still shutting down. Try again in a moment."
+            logger.warning("Rejected new job: %s", message)
+            return self._dump({"ok": False, "error": message})
+        if not book_id:
+            return self._dump({"ok": False, "error": "No book selected."})
+        try:
+            book = self.book_repo.get_book(book_id)
+            if not book:
+                logger.warning("Rejected new job: book %s not found.", book_id)
+                return self._dump({"ok": False, "error": "Book not found. Re-import it and try again."})
+            if not self.cred_repo.list_credentials(only_enabled=True):
+                message = (
+                    "No API credentials are configured. Add an API key under "
+                    "API Credentials before starting a translation."
+                )
+                logger.warning("Rejected new job: no enabled credentials.")
+                return self._dump({"ok": False, "error": message})
+
+            style_values = {
+                "Literary — Flowing Prose": TranslationStyleType.LITERARY,
+                "Faithful — Close to Source": TranslationStyleType.LITERAL,
+                "Xianxia — Genre Native": TranslationStyleType.WEB_NOVEL,
+                "Fast Draft — Speed First": TranslationStyleType.NATURAL,
+            }
+            custom_settings = {}
+            if strategy and strategy.strip():
+                custom_settings["strategy"] = strategy.strip()
+            if model and model.strip() and model != "No models configured":
+                custom_settings["preferred_model"] = model.strip()
+
+            job = TranslationJob(
+                book_id=book.id,
+                book_title=book.metadata.title,
+                output_format=output_format.lower(),
+                style=style_values.get(style, TranslationStyleType.NATURAL),
+                glossary_profile_id=glossary_id.strip() if glossary_id and glossary_id.strip() else None,
+                custom_settings=custom_settings,
+            )
+            self.job_repo.create_job(job)
+            self._job_id = job.id
+            logger.info("Created job %s for '%s'.", job.id, book.metadata.title)
+            self._start_job_worker(job)
+            return self._dump({"ok": True, "job": self._job_dict(job)})
+        except Exception as exc:
+            logger.exception("Could not start translation job for book %s", book_id)
+            return self._dump({"ok": False, "error": f"Could not start the translation: {exc}"})
+
+    def _start_job_worker(self, job: TranslationJob) -> None:
+        """Start a worker for a new or resumable job."""
+        # Reset control flags synchronously, before the thread starts. Doing it
+        # inside the worker would discard a Cancel click made in the QUEUED
+        # window between create_job() and the worker's first instruction.
+        self.job_runner.reset_control()
+
+        # Keep a strong reference until QThread.finished fires. Dropping the
+        # only reference from inside finished_signal (which is emitted while
+        # the thread is still running) makes Qt abort the whole process.
+        worker = AsyncWorker(lambda: self.job_runner.run_job(job.id), job_id=job.id)
+        # Connect through plain callables instead of bound methods of this
+        # WebChannel object. Connecting a cross-thread signal to a bound
+        # method can break Qt WebChannel's own signal forwarding, after
+        # which the UI silently stops receiving progress updates.
+        worker.progress_signal.connect(
+            lambda job_state, segment: self._on_worker_progress(job_state, segment)
+        )
+        # Capture the job id: using the mutable self._job_id later could
+        # announce the wrong job if another job starts during thread teardown.
+        worker.finished_signal.connect(
+            lambda success, message, job_id=job.id: self._on_worker_finished(
+                job_id, success, message
+            )
+        )
+        worker.finished.connect(lambda worker=worker: self._release_worker(worker))
+        self.worker = worker
+        try:
+            worker.start()
+        except Exception:
+            self.worker = None
+            worker.deleteLater()
+            raise
+        logger.info("Worker thread started for job %s.", job.id)
+        self._dispatch_progress(job, None)
+
+    @Slot(str, result=str)
+    def resume_job(self, book_id: str) -> str:
+        """Resume a paused job, or restart an unfinished job after a restart."""
+        book_id = (book_id or "").strip()
+        if not book_id:
+            return self._dump({"ok": False, "error": "No book selected."})
+        try:
+            if self.worker is not None:
+                if not self.worker.isRunning():
+                    return self._dump({
+                        "ok": False,
+                        "error": "The previous translation is still shutting down. Try again in a moment.",
+                    })
+                job = self.job_repo.get_job(self._job_id) if self._job_id else None
+                if job is None or job.book_id != book_id or job.status != JobStatus.PAUSED:
+                    return self._dump({
+                        "ok": False,
+                        "error": "A different translation job is already running.",
+                    })
+                self.job_runner.resume()
+                job.status = JobStatus.RUNNING
+                media = self.job_repo.get_provider_models([job.id]).get(job.id, ("", ""))
+                logger.info("Resumed paused job %s.", job.id)
+                return self._dump({
+                    "ok": True,
+                    "resumed": True,
+                    "job": self._job_dict(job, *media),
+                })
+
+            job = self.job_repo.get_latest_resumable_job_for_book(book_id)
+            if job is None:
+                return self._dump({"ok": False, "error": "No translation job was found for this book."})
+            resumable = {
+                JobStatus.PAUSED,
+                JobStatus.CANCELLED,
+                JobStatus.NEEDS_REVIEW,
+                JobStatus.FAILED,
+            }
+            if job.status not in resumable:
+                return self._dump({
+                    "ok": False,
+                    "error": "This job is already complete. Start a new translation instead.",
+                })
+            if not self.cred_repo.list_credentials(only_enabled=True):
+                return self._dump({
+                    "ok": False,
+                    "error": (
+                        "No API credentials are configured. Add an API key under "
+                        "API Credentials before resuming."
+                    ),
+                })
+            self._job_id = job.id
+            # Show RUNNING immediately; the worker will persist the same status
+            # once it has reloaded the book and segmented state.
+            job.status = JobStatus.RUNNING
+            media = self.job_repo.get_provider_models([job.id]).get(job.id, ("", ""))
+            self._start_job_worker(job)
+            logger.info("Resumed unfinished job %s for book %s.", job.id, book_id)
+            return self._dump({
+                "ok": True,
+                "resumed": True,
+                "job": self._job_dict(job, *media),
+            })
+        except Exception as exc:
+            logger.exception("Could not resume translation for book %s", book_id)
+            return self._dump({"ok": False, "error": f"Could not resume the translation: {exc}"})
 
     @Slot(str, str, str, str, result=str)
     def save_credential(self, provider: str, name: str, model: str, secret: str) -> str:
@@ -305,7 +547,6 @@ class WebBridge(QObject):
         except (TypeError, ValueError) as exc:
             return self._dump({"ok": False, "error": str(exc)})
 
-    @Slot(str, str, str, result=str)
     @Slot(str, str, str, str, result=str)
     def update_credential(self, credential_id: str, name: str, model: str, secret: str = "") -> str:
         credential = self.cred_repo.get_credential(credential_id)
@@ -372,12 +613,100 @@ class WebBridge(QObject):
 
     @Slot(result=str)
     def pause_job(self) -> str:
+        logger.info("Pause requested for job %s.", self._job_id)
         self.job_runner.pause()
         return self._dump({"ok": True})
 
+    @Slot(str, result=str)
+    def cancel_job(self, book_id: str = "") -> str:
+        logger.info("Cancel requested for job %s.", self._job_id or book_id or "?")
+        if self.worker is not None:
+            # The running worker owns the job state and will persist CANCELLED
+            # at the next segment boundary.
+            self.job_runner.cancel()
+            return self._dump({"ok": True, "active": True})
+
+        book_id = (book_id or "").strip()
+        job = None
+        if book_id:
+            job = self.job_repo.get_latest_resumable_job_for_book(book_id)
+        elif self._job_id:
+            job = self.job_repo.get_job(self._job_id)
+            if job is not None and job.status not in (
+                JobStatus.PAUSED,
+                JobStatus.QUEUED,
+                JobStatus.RUNNING,
+                JobStatus.CANCELLED,
+                JobStatus.NEEDS_REVIEW,
+                JobStatus.FAILED,
+            ):
+                job = None
+        if job is None:
+            return self._dump({"ok": False, "error": "No paused translation job was found."})
+        if job.status in (
+            JobStatus.PAUSED,
+            JobStatus.QUEUED,
+            JobStatus.RUNNING,
+            JobStatus.NEEDS_REVIEW,
+            JobStatus.FAILED,
+        ):
+            # A paused job restored after a restart has no worker to receive
+            # the cancel flag. Persist the state change directly.
+            self.job_repo.clear_job_error(job.id)
+            self.job_repo.update_job_status(job.id, JobStatus.CANCELLED)
+            job.status = JobStatus.CANCELLED
+            job.error_message = None
+            self._dispatch_progress(job, None)
+            logger.info("Marked paused job %s as cancelled.", job.id)
+        return self._dump({"ok": True, "job": self._job_dict(job)})
+
+    @Slot(int, str, result=str)
+    def read_logs(self, max_lines: int = 400, level: str = "") -> str:
+        """Return the newest log lines for the Diagnostics page."""
+        try:
+            path = get_log_path()
+            lines = _tail_lines(path, max_lines, level)
+            return self._dump({
+                "ok": True,
+                "path": str(path),
+                "errorPath": str(get_error_log_path()),
+                "lines": lines,
+            })
+        except OSError as exc:
+            logger.exception("Could not read application log")
+            return self._dump({"ok": False, "error": str(exc), "lines": []})
+
     @Slot(result=str)
-    def cancel_job(self) -> str:
-        self.job_runner.cancel()
+    def open_logs_folder(self) -> str:
+        """Open the folder that contains the log files."""
+        path = get_log_path()
+        folder = path.parent
+        try:
+            folder.mkdir(parents=True, exist_ok=True)
+            opened = QDesktopServices.openUrl(QUrl.fromLocalFile(str(folder)))
+            logger.info("Opened log folder %s (success=%s).", folder, opened)
+            return self._dump({"ok": bool(opened), "path": str(folder)})
+        except OSError as exc:
+            logger.exception("Could not open log folder %s", folder)
+            return self._dump({"ok": False, "error": str(exc), "path": str(folder)})
+
+    @Slot(str, str, result=str)
+    def log_client(self, level: str, message: str) -> str:
+        """Persist a message from the HTML/JavaScript layer."""
+        levels = {
+            "debug": logging.DEBUG,
+            "info": logging.INFO,
+            "warning": logging.WARNING,
+            "warn": logging.WARNING,
+            "error": logging.ERROR,
+            "critical": logging.CRITICAL,
+        }
+        text = (message or "").strip()
+        if len(text) > 12000:
+            text = text[:12000] + " …(truncated)"
+        logging.getLogger("bookbridge.ui.js").log(
+            levels.get((level or "").lower(), logging.INFO), "%s", text
+        )
         return self._dump({"ok": True})
 
     @Slot(str, int, int, int, float, str, str, result=str)
@@ -398,12 +727,12 @@ class WebBridge(QObject):
 
         epub_changed = epub_granularity != settings.epub_block_granularity
         pdf_changed = pdf_granularity != settings.pdf_block_granularity
-        if (epub_changed or pdf_changed) and self.worker and self.worker.isRunning():
+        if (epub_changed or pdf_changed) and self.worker is not None:
             return self._dump({
                 "ok": False,
                 "error": "Wait for the active translation to finish before changing block granularity.",
             })
-        if self.reparse_worker and self.reparse_worker.isRunning():
+        if self.reparse_worker is not None:
             return self._dump({
                 "ok": False,
                 "error": "Existing books are still being updated. Please try again when that finishes.",
@@ -441,14 +770,28 @@ class WebBridge(QObject):
             settings.save()
             self.data_changed.emit("settings")
             if book_ids:
-                self.reparse_worker = BookReparseWorker(
+                worker = BookReparseWorker(
                     book_ids,
                     epub_granularity,
                     pdf_granularity,
                 )
-                self.reparse_worker.completed.connect(self._on_book_reparse_finished)
-                self.reparse_worker.finished.connect(self._clear_reparse_worker)
-                self.reparse_worker.start()
+                # Relaying through lambdas is required: connecting a
+                # cross-thread signal directly to a bound method of the
+                # registered WebChannel object silently disables all signal
+                # forwarding to JavaScript.
+                worker.completed.connect(
+                    lambda message: self._on_book_reparse_finished(message)
+                )
+                worker.finished.connect(
+                    lambda worker=worker: self._release_reparse_worker(worker)
+                )
+                self.reparse_worker = worker
+                try:
+                    worker.start()
+                except Exception:
+                    self.reparse_worker = None
+                    worker.deleteLater()
+                    raise
             return self._dump({"ok": True, "reparsing": len(book_ids)})
         except (OSError, TypeError, ValueError) as exc:
             for field_name, value in original_settings.items():
@@ -459,8 +802,33 @@ class WebBridge(QObject):
         self.book_reparse_finished.emit(message)
         self.data_changed.emit("books")
 
-    def _clear_reparse_worker(self) -> None:
-        self.reparse_worker = None
+    def _release_reparse_worker(self, worker: BookReparseWorker) -> None:
+        if self.reparse_worker is worker:
+            self.reparse_worker = None
+        try:
+            worker.deleteLater()
+        except RuntimeError:
+            pass
+
+    def running_worker_labels(self) -> List[str]:
+        """Names of background threads that are still alive or about to run."""
+        labels = []
+        # A worker reference appears before QThread.isRunning() flips to True.
+        # Treat both as busy so closing cannot race the worker's start-up.
+        if self.worker is not None:
+            labels.append("translation")
+        if self.reparse_worker is not None:
+            labels.append("book update")
+        return labels
+
+    def request_shutdown(self) -> None:
+        """Ask all background workers to stop without destroying QThreads."""
+        if self.worker is not None:
+            logger.info("Shutdown requested: cancelling the translation job.")
+            self.job_runner.cancel()
+        if self.reparse_worker is not None:
+            logger.info("Shutdown requested: cancelling the book reparse.")
+            self.reparse_worker.cancel()
 
     def _on_job_progress(self, job: Any, segment: Any) -> None:
         """Route progress to the UI. Always go through the worker signal when one is
@@ -475,7 +843,12 @@ class WebBridge(QObject):
 
     def _dispatch_progress(self, job: Any, segment: Any) -> None:
         self.job_progress.emit(self._dump({
-            "job": self._job_dict(job),
+            "seq": next(self._progress_seq),
+            "job": self._job_dict(
+                job,
+                getattr(segment, "provider_used", "") or "" if segment else "",
+                getattr(segment, "model_used", "") or "" if segment else "",
+            ),
             "segment": {
                 "source": segment.source_text,
                 "translated": segment.translated_text or "",
@@ -484,7 +857,52 @@ class WebBridge(QObject):
             } if segment else None,
         }))
 
-    def _on_worker_finished(self, success: bool, message: str) -> None:
-        self.worker = None  # Clear reference so future callbacks use direct dispatch
+    def _on_worker_finished(self, job_id: str, success: bool, message: str) -> None:
+        """Handle the worker's custom finished signal.
+
+        Do **not** drop ``self.worker`` here: this signal is emitted from inside
+        ``QThread.run()``. Releasing the last reference at that point destroys
+        the QThread while it is still running and Qt aborts the process. The
+        reference is released from ``QThread.finished`` via ``_release_worker``.
+        """
+        job = None
+        if job_id:
+            try:
+                job = self.job_repo.get_job(job_id)
+            except Exception:
+                logger.exception("Could not reload job %s after it finished.", job_id)
+        if job is not None and job.status == JobStatus.CANCELLED and not success:
+            message = "Translation cancelled. Progress is saved."
+        elif not success and job is not None and job.error_message:
+            message = job.error_message
+        elif success and (not message or message == "Job completed successfully."):
+            message = "Translation completed successfully."
+        if job is not None:
+            logger.info(
+                "Job %s finished: success=%s status=%s segments=%d/%d failures=%d message=%s",
+                job.id,
+                success,
+                job.status.value,
+                job.completed_segments,
+                job.total_segments,
+                job.failed_segments,
+                message,
+            )
+        else:
+            logger.info("Job finished: success=%s message=%s", success, message)
         self.job_finished.emit(success, message)
         self.data_changed.emit("jobs")
+
+    def _release_worker(self, worker: AsyncWorker) -> None:
+        """Release a QThread only after Qt reports it has really finished."""
+        try:
+            worker.wait(5000)
+        except RuntimeError:
+            pass
+        if self.worker is worker:
+            self.worker = None
+        try:
+            worker.deleteLater()
+        except RuntimeError:
+            pass
+        logger.debug("Worker thread released for job %s.", getattr(worker, "job_id", None))

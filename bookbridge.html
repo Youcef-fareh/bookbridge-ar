@@ -274,6 +274,19 @@ body.modal-open .main{
 .foot-bar .fl{display:flex;gap:8px;align-items:center}
 .foot-bar .ic{width:13px;height:13px;color:var(--green)}
 
+/* logs & diagnostics */
+.log-toolbar{display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap;padding:12px 16px;border-bottom:1px solid var(--line)}
+.log-toolbar .log-meta{font-size:11.5px;color:var(--quiet);word-break:break-all}
+.log-toolbar .log-meta b{color:var(--mut);font-weight:600}
+.log-controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.log-controls .select{height:31px;width:auto;min-width:140px}
+.log-controls label{display:flex;gap:7px;align-items:center;font-size:12px;color:var(--mut);cursor:pointer;white-space:nowrap}
+.log-view{margin:0;height:calc(100vh - 300px);min-height:320px;overflow:auto;background:var(--inset);padding:13px 16px;font:11.5px/1.65 var(--font-m);color:#b9c6e4;white-space:pre-wrap;word-break:break-word}
+.log-line{display:block}
+.log-line.lv-warning{color:#fbbf24}
+.log-line.lv-error,.log-line.lv-critical{color:#f87171}
+.log-line.lv-debug{color:#7d8bab}
+.log-empty{padding:28px;text-align:center;color:var(--quiet);font-size:12.5px}
 </style>
 </head>
 <body>
@@ -308,6 +321,7 @@ body.modal-open .main{
   <symbol id="i-book" viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></symbol>
   <symbol id="i-img" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="1.8"/><path d="m4 18 5.5-5.5 3.5 3.5 3-3L21 18"/></symbol>
   <symbol id="i-quote" viewBox="0 0 24 24"><path d="M9.5 8c-2.5 1-4 3-4 6v2h4.5v-5H7.8c.2-1.3 1-2.3 2.2-3zM19 8c-2.5 1-4 3-4 6v2h4.5v-5h-2.2c.2-1.3 1-2.3 2.2-3z"/></symbol>
+  <symbol id="i-term" viewBox="0 0 24 24"><rect x="2.5" y="4" width="19" height="16" rx="2.2"/><path d="m7 9.5 3 3-3 3M13 15.5h4"/></symbol>
 </svg>
 
 <aside class="sidebar">
@@ -322,6 +336,7 @@ body.modal-open .main{
     <button class="nav-btn" data-page="glossary"><svg class="ic"><use href="#i-book-open"/></svg><span>Glossary &amp; Terms</span></button>
     <button class="nav-btn" data-page="creds"><svg class="ic"><use href="#i-key"/></svg><span>API Credentials</span></button>
     <button class="nav-btn" data-page="settings"><svg class="ic"><use href="#i-gear"/></svg><span>Settings</span></button>
+    <button class="nav-btn" data-page="logs"><svg class="ic"><use href="#i-term"/></svg><span>Logs &amp; Diagnostics</span></button>
   </nav>
   <div class="side-foot"><span class="dot"></span><button class="btn btn-sec btn-sm" id="themeToggle" type="button" title="Toggle light and dark mode">☼ <span>Light mode</span></button></div>
 </aside>
@@ -469,6 +484,32 @@ body.modal-open .main{
   </div>
 </section>
 
+<!-- ================= LOGS ================= -->
+<section class="page" id="page-logs">
+  <div class="page-head">
+    <div><h1 class="page-title">Logs &amp; Diagnostics</h1><p class="page-sub">Everything the app does is recorded here — attach this file when reporting a problem.</p></div>
+    <div class="head-actions">
+      <button class="btn btn-sec" id="btnLogsRefresh"><svg class="ic"><use href="#i-refresh"/></svg> Refresh</button>
+      <button class="btn btn-sec" id="btnLogsFolder"><svg class="ic"><use href="#i-folder"/></svg> Open Log Folder</button>
+    </div>
+  </div>
+  <div class="card">
+    <div class="log-toolbar">
+      <div class="log-meta">Log file: <b id="logPath">—</b><br>Errors only: <b id="logErrorPath">—</b></div>
+      <div class="log-controls">
+        <select class="select" id="logLevel" title="Minimum level to display">
+          <option value="">All levels</option>
+          <option value="INFO" selected>Info and above</option>
+          <option value="WARNING">Warnings and above</option>
+          <option value="ERROR">Errors only</option>
+        </select>
+        <label><input type="checkbox" id="logAuto" checked> Auto-refresh</label>
+      </div>
+    </div>
+    <pre class="log-view" id="logView">Loading log…</pre>
+  </div>
+</section>
+
 <footer class="foot-bar">
   <span class="fl"><svg class="ic"><use href="#i-lock"/></svg> Local-first — credentials encrypted in the local vault</span>
   <span class="mono" style="font-size:10.5px">BookBridge v1.0.0 · cache healthy · pacing active</span>
@@ -497,6 +538,27 @@ function applyTheme(light){
 applyTheme(localStorage.getItem('bookbridge-theme')==='light');
 if(themeToggle)themeToggle.onclick=()=>{const light=!document.body.classList.contains('light');applyTheme(light);localStorage.setItem('bookbridge-theme',light?'light':'dark')};
 const avatar=b=>b.cover?`<img class="bcover" src="${esc(b.cover)}" onerror="this.replaceWith(this.nextElementSibling)"><span class="bcover-ph" hidden>${esc((b.title||'?').trim()[0]||'?')}</span>`:`<span class="bcover-ph">${esc((b.title||'?').trim()[0]||'?')}</span>`;
+
+/* Backend bridge + client-side logging.
+   Declared before anything else runs so window.onerror can always report. */
+let bookBridge=null;
+const clientLogQueue=[];
+function logClient(level,msg){
+ const text=String(msg||'').slice(0,8000);
+ if(bookBridge&&bookBridge.log_client){
+  try{bookBridge.log_client(level,text,()=>{})}catch(e){}
+ }else{
+  clientLogQueue.push([level,text]);
+  if(clientLogQueue.length>50)clientLogQueue.shift();
+ }
+}
+window.addEventListener('error',e=>{
+ logClient('error',`Uncaught JS error: ${e.message} @ ${e.filename||'?'}:${e.lineno||0}:${e.colno||0}`+(e.error&&e.error.stack?`\n${e.error.stack}`:''));
+});
+window.addEventListener('unhandledrejection',e=>{
+ const reason=e.reason;
+ logClient('error','Unhandled promise rejection: '+(reason&&reason.stack?reason.stack:String(reason)));
+});
 
 const DEFAULT_PROVIDERS = [
  { id: 'gemini', name: 'Google Gemini', models: ['gemini-3.5-flash-lite', 'gemini-3.1-flash-lite', 'gemini-2.5-flash', 'gemini-1.5-flash', 'gemini-1.5-pro'], rate: '15 RPM · 240,000 TPM · 500 RPD (Strict pacing)' },
@@ -539,7 +601,8 @@ const state={
  books:[], jobs:[],
  selBook:null, expanded:new Set(),
  profiles:[], activeProfile:null, glossSearch:'', providers:backendProviderState([],[]),
- job:null, settings:{dir:'',chunk:1200,ctx:2,epub_granularity:'paragraph',pdf_granularity:'paragraph',retry:2,cool:0.05}
+ job:null, lastJobSeq:0, logs:{path:'',errorPath:''},
+ settings:{dir:'',chunk:1200,ctx:2,epub_granularity:'paragraph',pdf_granularity:'paragraph',retry:2,cool:0.05}
 };
 function syncStrategies(){
  const select=$('#cfgStrat'), current=select.value;
@@ -591,11 +654,13 @@ function infoBox(title,msg,tone='info'){
 function goTo(p){
  $$('.nav-btn').forEach(b=>b.classList.toggle('active',b.dataset.page===p));
  $$('.page').forEach(s=>s.classList.toggle('active',s.id==='page-'+p));
+ if(p!=='logs')stopLogPoll();
  if(p==='dashboard')renderDashboard();
  if(p==='library')renderLibrary();
  if(p==='studio')renderStudio();
  if(p==='glossary')renderGlossary();
  if(p==='creds')renderCreds();
+ if(p==='logs'){renderLogs();startLogPoll();}
 }
 $$('.nav-btn').forEach(b=>b.onclick=()=>goTo(b.dataset.page));
 
@@ -667,6 +732,30 @@ function renderInspector(){
  const t=$('#inspTitle'),c=$('#inspCount'),body=$('#inspBody');
  if(!b){t.innerHTML=`${ic('search')} Book Structure Inspector (Select a book)`;c.hidden=true;
   body.innerHTML=`<div class="empty-mini" style="height:100%;justify-content:center">${ic('book','ic-xl')}<span>Select a book on the left to inspect its parsed chapters and content blocks.</span></div>`;return}
+ if(!b.chaptersLoaded){
+  t.innerHTML=`${ic('search')} Inspector - ${esc(b.title)}`;c.hidden=true;
+  if(b._loadingChapters)return;
+  b._loadingChapters=true;
+  body.innerHTML=`<div class="empty-mini" style="height:100%;justify-content:center">${ic('book','ic-xl')}<span>Loading book structure…</span></div>`;
+  if(!bookBridge){b._loadingChapters=false;body.innerHTML=`<div class="empty-mini"><span>Desktop app required to inspect books.</span></div>`;return}
+  const requestedId=b.id;
+  setTimeout(()=>{if(b._loadingChapters&&state.selBook===requestedId){b._loadingChapters=false;if(state.selBook===requestedId){body.innerHTML=`<div class="empty-mini"><span>Timed out loading book details. Open Logs &amp; Diagnostics for details.</span></div>`}}},15000);
+  bookBridge.get_book_details(b.id,raw=>{
+   b._loadingChapters=false;
+   try{
+    const r=JSON.parse(raw);
+    if(!r.ok)throw new Error(r.error||'Unknown error');
+    Object.assign(b,r.book);
+    b.chapters=r.book.chapters||[];
+    b.chaptersLoaded=true;
+    if(state.selBook===b.id)renderInspector();
+   }catch(e){
+    logClient('error','Could not load book details: '+(e&&e.stack?e.stack:String(e)));
+    if(state.selBook===b.id)body.innerHTML=`<div class="empty-mini"><span>Could not load book details: ${esc(String(e.message||e))}</span></div>`;
+   }
+  });
+  return;
+ }
  const tb=transBlocks(b);
  t.innerHTML=`${ic('search')} Inspector — ${esc(b.title)}`;c.hidden=false;c.textContent=b.chapters.length+' chapters · '+tb+' blocks';
  body.innerHTML=b.chapters.map(ch=>{
@@ -755,14 +844,18 @@ function renderStudio(){
  syncJobUI();
  if(state.job){
   paintJob(state.job);
-  if(state.job.status==='RUNNING'){
+  if(state.job.status==='QUEUED'){
+   setStatusMsg(state.job.chapter?`Preparing segments — ${esc(state.job.chapter)}…`:'Preparing translation job…','run');
+  }else if(state.job.status==='RUNNING'){
    setStatusMsg(`Translating segment ${state.job.seg || 0} of ${state.job.segT || 0}…`,'run');
   }else if(state.job.status==='COMPLETED'){
    setStatusMsg(`Translation complete (${state.job.seg || 0}/${state.job.segT || 0} segments).`,'ok');
   }else if(state.job.status==='PAUSED'){
    setStatusMsg('Job Paused.','warn');
   }else if(state.job.status==='NEEDS_REVIEW'||state.job.status==='FAILED'){
-   setStatusMsg('Translation stopped — needs review.','warn');
+   setStatusMsg(state.job.error?`Translation stopped — ${esc(state.job.error)}`:'Translation stopped — needs review.','warn');
+  }else if(state.job.status==='CANCELLED'){
+   setStatusMsg('Translation cancelled. Progress has been saved.','warn');
   }
  }
 }
@@ -775,17 +868,23 @@ function syncModels(){
 $('#cfgStrat').addEventListener('change',syncModels);
 function syncJobUI(){
  const j=state.job;
- const hasBook=!!$('#cfgBook').value;
- $('#btnStart').disabled=(!hasBook)||(j&&(j.status==='RUNNING'||j.scheduled));
- $('#btnStart').innerHTML=j&&j.status==='PAUSED'?`${ic('play')} Resume Translation`:j&&j.status==='COMPLETED'?`${ic('refresh')} Retranslate Book`:`${ic('play')} Start Full Translation`;
+ const bookId=$('#cfgBook').value;
+ const selJob=(j&&j.bookId===bookId)?j:null;
+ const resumable=!!(selJob&&(['PAUSED','CANCELLED','NEEDS_REVIEW'].includes(selJob.status)||(selJob.status==='FAILED'&&((Number(selJob.segT)||0)>0||(Number(selJob.seg)||0)>0))));
+ const hasBook=!!bookId;
+ const busy=!!(j&&(j.status==='RUNNING'||j.status==='QUEUED'||j.scheduled));
+ $('#btnStart').disabled=(!hasBook)||busy;
+ $('#btnStart').innerHTML=resumable?`${ic('play')} Resume Translation`:selJob&&selJob.status==='COMPLETED'?`${ic('refresh')} Retranslate Book`:`${ic('play')} Start Full Translation`;
  $('#btnPause').disabled=!(j&&j.status==='RUNNING');
- $('#btnCancel').disabled=!(j&&(j.status==='RUNNING'||j.status==='PAUSED'||j.scheduled));
+ $('#btnCancel').disabled=!(j&&(j.status==='RUNNING'||j.status==='QUEUED'||j.status==='PAUSED'||j.scheduled));
  const st=$('#studioState');
  if(!j){st.className='bdg b-mut';st.innerHTML='<i></i> IDLE'}
  else if(j.scheduled){st.className='bdg b-warn';st.innerHTML='<i></i> SCHEDULED'}
+ else if(j.status==='QUEUED'){st.className='bdg b-run';st.innerHTML='<i></i> PREPARING'}
  else if(j.status==='RUNNING'){st.className='bdg b-run';st.innerHTML='<i></i> RUNNING'}
  else if(j.status==='PAUSED'){st.className='bdg b-warn';st.innerHTML='<i></i> PAUSED'}
  else if(j.status==='NEEDS_REVIEW'||j.status==='FAILED'){st.className='bdg b-err';st.innerHTML='<i></i> '+j.status.replace('_',' ')}
+ else if(j.status==='CANCELLED'){st.className='bdg b-warn';st.innerHTML='<i></i> CANCELLED'}
  else{st.className='bdg b-ok';st.innerHTML='<i></i> COMPLETED'}
 }
 function setStatusMsg(txt,cls){const el=$('#jobStatus');if(!el)return;el.className='job-status '+(cls||'');el.innerHTML=`${ic(cls==='ok'?'check':cls==='warn'?'alert':cls==='err'?'alert':'info')} ${txt}`}
@@ -805,28 +904,97 @@ function paintJob(j){
  if(mRet)mRet.textContent=j.retries||0;
  if(mFail)mFail.textContent=j.failures||0;
 }
+function resumeTranslation(bookId){
+ if(!bookBridge)return infoBox('Desktop App Required','Translations run through the BookBridge desktop application.','warn');
+ const startBtn=$('#btnStart');
+ startBtn.disabled=true;
+ setStatusMsg('Resuming translation…','run');
+ logClient('info',`Resume translation requested: book=${bookId}`);
+ let answered=false;
+ const watchdog=setTimeout(()=>{
+  if(answered)return;
+  answered=true;
+  startBtn.disabled=false;
+  setStatusMsg('The backend did not respond while resuming.','err');
+  logClient('error','resume_job did not respond within 15 seconds.');
+  infoBox('Resume Did Not Start','The backend did not respond. Open <b>Logs &amp; Diagnostics</b> to see what happened.','err');
+ },15000);
+ bookBridge.resume_job(bookId,raw=>{
+  if(answered)return;
+  answered=true;
+  clearTimeout(watchdog);
+  startBtn.disabled=false;
+  try{
+   const result=JSON.parse(raw);
+   if(!result.ok){
+    setStatusMsg('Could not resume the translation.','err');
+    logClient('error','resume_job rejected: '+(result.error||'unknown error'));
+    syncJobUI();
+    return infoBox('Resume Failed',esc(result.error||'Unknown error.'),'err');
+   }
+   const j=result.job;
+   state.job={id:j.id,bookId:j.bookId,status:j.status||'RUNNING',seg:j.segments,segT:j.segmentsTotal,tokens:j.tokens,cached:j.cached,retries:j.retries,failures:j.failures,prov:j.provider||'—',model:j.model||'—',chapter:j.chapter||'',error:j.error||''};
+   const existing=state.jobs.find(x=>x.id===j.id);
+   if(existing)Object.assign(existing,{status:state.job.status,seg:state.job.seg,segT:state.job.segT,tokens:state.job.tokens,cached:state.job.cached,retries:state.job.retries,failures:state.job.failures,provider:j.provider||existing.provider,model:j.model||existing.model,upd:Date.now()});
+   else state.jobs.unshift({id:j.id,bookId:j.bookId,bookTitle:j.bookTitle,status:state.job.status,seg:state.job.seg,segT:state.job.segT,tokens:state.job.tokens,cached:state.job.cached,retries:state.job.retries,failures:state.job.failures,provider:j.provider||'',model:j.model||'',chapter:j.chapter||'',error:j.error||'',upd:Date.now()});
+   paintJob(state.job);
+   syncJobUI();
+   setStatusMsg('Translating…','run');
+   toast('Translation resumed.','info');
+   logClient('info',`Translation job ${j.id} resumed.`);
+  }catch(e){
+   logClient('error','Could not parse resume_job response: '+e+'\nResponse: '+String(raw).slice(0,2000));
+   setStatusMsg('Failed to read the backend response.','err');
+   infoBox('Error','Failed to resume the job. Open <b>Logs &amp; Diagnostics</b> for details.','err');
+  }
+ });
+}
 $('#btnStart').onclick=()=>{
  const bookId=$('#cfgBook').value;
  if(!bookId)return infoBox('No Book Selected','Import a book in the Book Library before starting a translation job.','warn');
  if(!bookBridge)return infoBox('Desktop App Required','Translations run through the BookBridge desktop application.','warn');
+ const activeForBook=(state.job&&state.job.bookId===bookId)?state.job:null;
+ const canResume=!!(activeForBook&&(['PAUSED','CANCELLED','NEEDS_REVIEW'].includes(activeForBook.status)||(activeForBook.status==='FAILED'&&((Number(activeForBook.segT)||0)>0||(Number(activeForBook.seg)||0)>0))));
+ if(canResume){resumeTranslation(bookId);return;}
  const startBtn = $('#btnStart');
  startBtn.disabled = true;
  const glossId=$('#cfgGloss').value||'';
  const strat=$('#cfgStrat').value||'auto';
  const model=$('#cfgModel').value||'';
  setStatusMsg('Initializing translation job…','run');
+ logClient('info',`Start translation requested: book=${bookId} format=${$('#cfgOut').value} style=${$('#cfgStyle').value} strategy=${strat} model=${model}`);
+ let answered=false;
+ const watchdog=setTimeout(()=>{
+  if(answered)return;
+  answered=true;
+  startBtn.disabled=false;
+  setStatusMsg('The backend did not respond. Open Logs & Diagnostics for details.','err');
+  logClient('error','create_job did not respond within 15 seconds.');
+  infoBox('Translation Did Not Start','The backend did not respond. Open <b>Logs &amp; Diagnostics</b> to see what happened.','err');
+ },15000);
  bookBridge.create_job(bookId,$('#cfgOut').value,$('#cfgStyle').value,glossId,strat,model,raw=>{
+  if(answered)return;
+  answered=true;
+  clearTimeout(watchdog);
   startBtn.disabled = false;
   try {
    const result=JSON.parse(raw);
-   if(!result.ok){setStatusMsg('Failed to start translation.','err');return infoBox('Translation Failed',esc(result.error),'err');}
+   if(!result.ok){
+    setStatusMsg('Failed to start translation.','err');
+    logClient('error','create_job rejected: '+(result.error||'unknown error'));
+    return infoBox('Translation Failed',esc(result.error||'Unknown error.'),'err');
+   }
    const j=result.job;
-   state.job={id:j.id,bookId:j.bookId,status:j.status,seg:j.segments,segT:j.segmentsTotal,tokens:j.tokens,cached:j.cached,retries:j.retries,failures:j.failures,prov:j.provider||'—',model:j.model||'—'};
+   state.job={id:j.id,bookId:j.bookId,status:j.status,seg:j.segments,segT:j.segmentsTotal,tokens:j.tokens,cached:j.cached,retries:j.retries,failures:j.failures,prov:j.provider||'—',model:j.model||'—',chapter:j.chapter||'',error:j.error||''};
    paintJob(state.job);
    syncJobUI();
+   setStatusMsg('Preparing translation job…','run');
    toast('Translation started.','info');
+   logClient('info',`Translation job ${j.id} created (status ${j.status}).`);
   } catch(e) {
-   infoBox('Error', 'Failed to start job response.', 'err');
+   logClient('error','Could not parse create_job response: '+e+'\nResponse: '+String(raw).slice(0,2000));
+   setStatusMsg('Failed to read the backend response.','err');
+   infoBox('Error', 'Failed to start job response. Open Logs &amp; Diagnostics for details.', 'err');
   }
  });
 };
@@ -837,7 +1005,31 @@ $('#btnPause').onclick=()=>{
  setStatusMsg('Job Paused.','warn');syncJobUI();toast('Job paused — progress preserved.','warn');
 };
 function cancelJob(silent){
- if(bookBridge){$('#btnCancel').disabled=true;setStatusMsg('Cancellation requested; current segment will finish first.','warn');bookBridge.cancel_job(()=>{if(!silent)toast('Job cancellation requested.','warn');refreshBackend()});return}
+ if(bookBridge){
+  const bookId=(state.job&&state.job.bookId)||$('#cfgBook').value||'';
+  const paused=!!(state.job&&state.job.status==='PAUSED');
+  $('#btnCancel').disabled=true;
+  setStatusMsg(paused?'Cancelling paused job…':'Cancellation requested; current segment will finish first.','warn');
+  bookBridge.cancel_job(bookId,raw=>{
+   try{
+    const r=JSON.parse(raw);
+    if(!r.ok){
+     $('#btnCancel').disabled=false;
+     setStatusMsg('Could not cancel the job.','err');
+     logClient('error','cancel_job rejected: '+(r.error||'unknown error'));
+     return toast(r.error||'Could not cancel the job.','err');
+    }
+   }catch(e){
+    $('#btnCancel').disabled=false;
+    setStatusMsg('Failed to read the backend response.','err');
+    logClient('error','Could not parse cancel_job response: '+e+'\nResponse: '+String(raw).slice(0,2000));
+    return toast('Could not cancel the job.','err');
+   }
+   if(!silent)toast(paused?'Job cancelled - progress preserved.':'Job cancellation requested.','warn');
+   refreshBackend();
+  });
+  return;
+ }
  const j=state.job;if(!j)return;
  clearInterval(state.timer);state.timer=null;
  if(j.scheduled){state.job=null;setStatusMsg('Ready to start translation.');$('#jobFill').style.width='0%';$('#jobPctText').textContent='0.0%';
@@ -1127,26 +1319,92 @@ $('#btnSaveSet').onclick=()=>{
  toast('Settings saved — exports, cache, logs and vault verified.');
 };
 
+/* ================= logs & diagnostics ================= */
+let logTimer=null;
+function stopLogPoll(){
+ if(logTimer){clearInterval(logTimer);logTimer=null;}
+}
+function startLogPoll(){
+ stopLogPoll();
+ if(bookBridge&&$('#logAuto')&&$('#logAuto').checked&&$('#page-logs').classList.contains('active')){
+  logTimer=setInterval(refreshLogs,2500);
+ }
+}
+function renderLogs(){
+ refreshLogs();
+ startLogPoll();
+}
+function refreshLogs(){
+ const view=$('#logView');
+ if(!view)return;
+ if(!bookBridge){
+  view.innerHTML='<span class="log-empty">Open this page inside the BookBridge desktop app to read application logs.</span>';
+  return;
+ }
+ const level=$('#logLevel').value||'';
+ bookBridge.read_logs(600,level,raw=>{
+  try{
+   const result=JSON.parse(raw);
+   if(!result.ok){
+    view.innerHTML=`<span class="log-empty">Could not read the log file: ${esc(result.error||'unknown error')}</span>`;
+    return;
+   }
+   const pathEl=$('#logPath'),errEl=$('#logErrorPath');
+   if(pathEl)pathEl.textContent=result.path||'—';
+   if(errEl)errEl.textContent=result.errorPath||'—';
+   const lines=result.lines||[];
+   const atBottom=view.scrollHeight-view.scrollTop-view.clientHeight<48;
+   if(!lines.length){
+    view.innerHTML='<span class="log-empty">No log entries at this level yet.</span>';
+   }else{
+    view.innerHTML=lines.map(line=>{
+     const m=/ \| (DEBUG|INFO|WARNING|ERROR|CRITICAL) +\| /.exec(line);
+     const lvl=m?m[1].toLowerCase():'info';
+     return `<span class="log-line lv-${lvl}">${esc(line)}</span>`;
+    }).join('');
+   }
+   if(atBottom)view.scrollTop=view.scrollHeight;
+  }catch(e){
+   view.innerHTML=`<span class="log-empty">Failed to parse the log response: ${esc(String(e))}</span>`;
+   logClient('error','Failed to parse read_logs response: '+(e&&e.stack?e.stack:String(e)));
+  }
+ });
+}
+if($('#logLevel'))$('#logLevel').addEventListener('change',refreshLogs);
+if($('#logAuto'))$('#logAuto').addEventListener('change',()=>{if($('#logAuto').checked)startLogPoll();else stopLogPoll();});
+if($('#btnLogsRefresh'))$('#btnLogsRefresh').onclick=()=>{refreshLogs();toast('Log refreshed.','info')};
+if($('#btnLogsFolder'))$('#btnLogsFolder').onclick=()=>{
+ if(!bookBridge)return infoBox('Desktop App Required','Log files are written by the BookBridge desktop application.','warn');
+ bookBridge.open_logs_folder(raw=>{
+  try{
+   const result=JSON.parse(raw);
+   if(!result.ok)return toast(result.error||'Could not open the log folder.','err');
+   toast('Opened log folder.','info');
+  }catch(e){logClient('error','open_logs_folder failed: '+e)}
+ });
+};
+
 /* ================= init ================= */
 renderDashboard();renderLibrary();renderStudio();renderGlossary();renderCreds();renderSettings();
 
 /* ================= Python backend integration ================= */
-let bookBridge=null;
 let backendRefreshInFlight=false,backendRefreshQueued=false;
 function hydrateBackend(raw){
  try {
   const data=JSON.parse(raw);
-  state.books=data.books||[];
-  state.jobs=(data.jobs||[]).map(j=>({id:j.id,bookId:j.bookId,bookTitle:j.bookTitle,status:j.status,prog:j.progress,seg:j.segments,segT:j.segmentsTotal,tokens:j.tokens,cached:j.cached,failures:j.failures,retries:j.retries,provider:j.provider,model:j.model,upd:Date.parse(j.updatedAt)||Date.now()}));
-  const active=state.jobs.find(j=>j.status==='RUNNING'||j.status==='PAUSED'||j.status==='NEEDS_REVIEW')||state.jobs[0];
-  state.job=active?{id:active.id,bookId:active.bookId,status:active.status,seg:active.seg,segT:active.segT,tokens:active.tokens,cached:active.cached||0,retries:active.retries||0,failures:active.failures||0,prov:active.provider||state.job?.prov||'—',model:active.model||state.job?.model||'—'}:null;
+  state.books=(data.books||[]).map(b=>({...b,chapters:b.chapters||[],chaptersLoaded:false,_loadingChapters:false}));
+  state.jobs=(data.jobs||[]).map(j=>({id:j.id,bookId:j.bookId,bookTitle:j.bookTitle,status:j.status,prog:j.progress,seg:j.segments,segT:j.segmentsTotal,tokens:j.tokens,cached:j.cached,failures:j.failures,retries:j.retries,provider:j.provider,model:j.model,chapter:j.chapter||'',error:j.error||'',upd:Date.parse(j.updatedAt)||Date.now()}));
+  const active=state.jobs.find(j=>j.status==='RUNNING'||j.status==='QUEUED'||j.status==='PAUSED'||j.status==='NEEDS_REVIEW')||state.jobs[0];
+  state.job=active?{id:active.id,bookId:active.bookId,status:active.status,seg:active.seg,segT:active.segT,tokens:active.tokens,cached:active.cached||0,retries:active.retries||0,failures:active.failures||0,prov:active.provider||state.job?.prov||'—',model:active.model||state.job?.model||'—',chapter:active.chapter||'',error:active.error||''}:null;
   state.profiles=data.profiles||[];
   state.providers=backendProviderState(data.credentials||[],data.settings?.providers||[]);
   state.settings=data.settings||state.settings;
+  state.logs={path:data.settings?.log_path||'',errorPath:data.settings?.error_log_path||''};
   if(document.body.classList.contains('modal-open')){backendRefreshQueued=true;return}
   renderDashboard();renderLibrary();renderStudio();renderGlossary();renderCreds();renderSettings();
  } catch(e) {
   console.error('Failed to hydrate backend state', e);
+  logClient('error','Failed to hydrate backend state: '+(e&&e.stack?e.stack:String(e)));
  }
 }
 function refreshBackend(){
@@ -1164,43 +1422,68 @@ function refreshBackend(){
  });
 }
 function connectBackend(){
- if(typeof qt==='undefined'||!qt.webChannelTransport||typeof QWebChannel==='undefined')return;
+ if(typeof qt==='undefined'||!qt.webChannelTransport||typeof QWebChannel==='undefined'){
+  logClient('warning','QWebChannel transport is not available; running in browser-only mode.');
+  return;
+ }
  new QWebChannel(qt.webChannelTransport,channel=>{
   bookBridge=channel.objects.bookBridge;
+  // Flush any messages captured before the channel was ready.
+  while(clientLogQueue.length){const item=clientLogQueue.shift();try{bookBridge.log_client(item[0],item[1],()=>{})}catch(e){}}
+  logClient('info','UI connected to the BookBridge backend.');
   bookBridge.job_progress.connect(raw=>{
    try{
     const event=JSON.parse(raw);
+    const seq=Number(event.seq)||0;
+    if(seq&&seq<=Number(state.lastJobSeq||0))return;
+    if(seq)state.lastJobSeq=seq;
     const j=event.job;
-    const existing=state.jobs.find(x=>x.id===j.id||x.bookId===j.bookId);
+    const existing=state.jobs.find(x=>x.id===j.id);
     const view=existing||{id:j.id,bookId:j.bookId};
-    Object.assign(view,{id:j.id,status:j.status,prog:j.progress,seg:j.segments,segT:j.segmentsTotal,tokens:j.tokens,cached:j.cached,retries:j.retries,failures:j.failures,provider:event.segment?.provider||j.provider,model:event.segment?.model||j.model,upd:Date.now()});
+    Object.assign(view,{id:j.id,status:j.status,prog:j.progress,seg:j.segments,segT:j.segmentsTotal,tokens:j.tokens,cached:j.cached,retries:j.retries,failures:j.failures,provider:event.segment?.provider||j.provider,model:event.segment?.model||j.model,chapter:j.chapter||'',error:j.error||'',upd:Date.now()});
     if(!existing)state.jobs.unshift(view);
-    state.job={id:j.id,bookId:j.bookId,status:j.status,seg:j.segments,segT:j.segmentsTotal,tokens:j.tokens,cached:j.cached,retries:j.retries,failures:j.failures,prov:event.segment?.provider||state.job?.prov||'—',model:event.segment?.model||state.job?.model||'—'};
+    state.job={id:j.id,bookId:j.bookId,status:j.status,seg:j.segments,segT:j.segmentsTotal,tokens:j.tokens,cached:j.cached,retries:j.retries,failures:j.failures,prov:event.segment?.provider||state.job?.prov||'—',model:event.segment?.model||state.job?.model||'—',chapter:j.chapter||'',error:j.error||''};
     if(event.segment && event.segment.source){
       const srcEl=$('#srcPanel'), arEl=$('#arPanel');
       if(srcEl)srcEl.textContent=event.segment.source;
       if(arEl)arEl.textContent=event.segment.translated||'Translating…';
     }
     paintJob(state.job);
-    if(j.status==='RUNNING'){
+    if(j.status==='QUEUED'){
+      setStatusMsg(j.chapter?`Preparing segments — ${esc(j.chapter)}…`:'Preparing translation job…','run');
+    }else if(j.status==='RUNNING'){
       setStatusMsg(`Translating segment ${j.segments} of ${j.segmentsTotal}…`,'run');
     }else if(j.status==='COMPLETED'){
       setStatusMsg(`Translation completed (${j.segments}/${j.segmentsTotal} segments).`,'ok');
     }else if(j.status==='PAUSED'){
       setStatusMsg('Job Paused.','warn');
+    }else if(j.status==='CANCELLED'){
+      setStatusMsg('Translation cancelled. Progress has been saved.','warn');
+    }else if(j.error){
+      setStatusMsg(`Translation stopped — ${esc(j.error)}`,'err');
     }
     syncJobUI();
     renderDashboard();
-   }catch(e){console.error('job_progress error',e);}
+   }catch(e){
+    console.error('job_progress error',e);
+    logClient('error','job_progress handler failed: '+(e&&e.stack?e.stack:String(e))+'\nPayload: '+String(raw).slice(0,2000));
+   }
   });
   bookBridge.job_finished.connect((success,message)=>{
+   const cancelled=!!(state.job&&state.job.status==='CANCELLED')||/^Translation cancelled\./i.test(message||'');
+   logClient(!success&&!cancelled?'error':'info','Job finished: success='+success+' message='+(message||''));
    refreshBackend();
+   if(cancelled){
+    setStatusMsg('Translation cancelled. Progress has been saved.','warn');
+    toast('Translation cancelled - progress saved.','warn');
+    return;
+   }
    if(success){
     setStatusMsg('Translation completed successfully.','ok');
     infoBox('Translation Complete','The translation finished successfully.','ok');
    }else{
-    setStatusMsg('Translation stopped: '+(message||'Allowed attempts reached'),'warn');
-    infoBox('Translation Stopped',esc(message||'The translation stopped after the allowed attempts.'),'err');
+    setStatusMsg('Translation stopped: '+esc(message||'Allowed attempts reached'),'warn');
+    infoBox('Translation Stopped',esc(message||'The translation stopped after the allowed attempts.')+'<br><br>Open <b>Logs &amp; Diagnostics</b> for the full trace.','err');
    }
   });
   bookBridge.book_reparse_finished.connect(message=>{

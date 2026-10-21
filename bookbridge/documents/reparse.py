@@ -2,7 +2,7 @@
 
 from collections import defaultdict
 from pathlib import Path
-from typing import List, Tuple
+from typing import Callable, List, Optional, Tuple
 
 from bookbridge.database.repositories.book_repo import BookRepository
 from bookbridge.database.repositories.job_repo import JobRepository
@@ -45,14 +45,22 @@ def reparse_books(
     book_ids: List[str],
     epub_granularity: str,
     pdf_granularity: str,
+    should_stop: Optional[Callable[[], bool]] = None,
 ) -> Tuple[int, List[str]]:
-    """Reparse the requested books and report per-book failures."""
+    """Reparse the requested books and report per-book failures.
+
+    ``should_stop`` is checked between books so the application can shut down
+    without destroying a running QThread.
+    """
     book_repo = BookRepository()
     job_repo = JobRepository()
     updated_count = 0
     errors = []
 
     for book_id in book_ids:
+        if should_stop is not None and should_stop():
+            errors.append("cancelled before all books were updated")
+            break
         previous = book_repo.get_book(book_id)
         if previous is None:
             errors.append(f"{book_id}: no longer exists")

@@ -46,27 +46,92 @@ class PdfRenderer(DocumentRenderer):
         MARGIN_BOTTOM = 60
         USABLE_WIDTH = PAGE_WIDTH - 2 * MARGIN_X
 
-        # Standard font
-        for ch in book.chapters:
-            page = doc.new_page(width=PAGE_WIDTH, height=PAGE_HEIGHT)
-            y = MARGIN_TOP
+        def new_page():
+            return doc.new_page(width=PAGE_WIDTH, height=PAGE_HEIGHT)
 
-            # Insert chapter title
-            title_text = _shape_rtl_text(ch.title)
-            rect_title = fitz.Rect(MARGIN_X, y, PAGE_WIDTH - MARGIN_X, y + 25)
-            page.insert_textbox(
-                rect_title,
-                title_text,
-                fontsize=16,
+        def split_text(text: str):
+            """Split unshaped text near the middle at a natural boundary."""
+            if len(text) <= 1:
+                return text, None
+            middle = len(text) // 2
+            # Prefer a paragraph break, then a line break, then a space.
+            boundary = max(
+                text.rfind("\n\n", 0, middle),
+                text.rfind("\n", 0, middle),
+                text.rfind(" ", 0, middle),
+            )
+            if boundary <= 0:
+                boundary = text.find(" ", middle)
+                if boundary < 0:
+                    boundary = text.find("\n", middle)
+            if boundary <= 0:
+                # A single very long token (URL, CJK run, etc.). Character
+                # splitting guarantees forward progress.
+                return text[:middle], text[middle:]
+            return text[:boundary].rstrip(), text[boundary + 1:].lstrip()
+
+        def insert_text(page, y: float, text: str, fontsize: float, heading: bool = False):
+            """Draw a text block and paginate instead of silently dropping text.
+
+            ``insert_textbox`` writes nothing and returns a negative value when
+            the block does not fit. The old code ignored that return value, so
+            any paragraph longer than the remaining page height vanished.
+            """
+            shaped = _shape_rtl_text(text)
+            rect = fitz.Rect(
+                MARGIN_X,
+                y,
+                PAGE_WIDTH - MARGIN_X,
+                PAGE_HEIGHT - MARGIN_BOTTOM,
+            )
+            rc = page.insert_textbox(
+                rect,
+                shaped,
+                fontsize=fontsize,
                 fontname="arabic",
                 fontfile=font_file,
                 align=fitz.TEXT_ALIGN_RIGHT,
             )
-            y += 35
+            if rc >= 0:
+                # Positive return value is the unused height in the rectangle.
+                used_height = rect.height - rc
+                return page, y + used_height + (16 if heading else 10)
+
+            # The block did not fit in the remaining space. If it is already
+            # partway down a page, retry the whole block at the top of a fresh
+            # page before splitting it. This keeps bidi/shaping context intact
+            # for the common "paragraph crosses a page boundary" case.
+            if y > MARGIN_TOP + 1:
+                return insert_text(new_page(), MARGIN_TOP, text, fontsize, heading)
+
+            first, second = split_text(text)
+            if second is None:
+                # A single glyph that still will not fit a full page. This is
+                # effectively impossible for normal fonts; preserve it anyway.
+                logger.warning("Text block could not fit on a page; writing it directly.")
+                page.insert_text(
+                    (PAGE_WIDTH - MARGIN_X, y + fontsize),
+                    shaped,
+                    fontsize=fontsize,
+                    fontname="arabic",
+                    fontfile=font_file,
+                )
+                return page, y + fontsize * 2 + 6
+
+            page, next_y = insert_text(page, y, first, fontsize, heading)
+            return insert_text(page, next_y, second, fontsize, heading)
+
+        # Standard font
+        for ch in book.chapters:
+            page = new_page()
+            y = MARGIN_TOP
+
+            # Insert chapter title (also paginates if unexpectedly long).
+            page, y = insert_text(page, y, ch.title, 16, heading=True)
 
             for blk in ch.blocks:
                 if y > PAGE_HEIGHT - MARGIN_BOTTOM - 40:
-                    page = doc.new_page(width=PAGE_WIDTH, height=PAGE_HEIGHT)
+                    page = new_page()
                     y = MARGIN_TOP
 
                 if blk.type == BlockType.IMAGE:
@@ -84,24 +149,10 @@ class PdfRenderer(DocumentRenderer):
                 text = blk.translated_text if blk.translated_text else blk.source_text
                 if not text:
                     continue
-                text = _shape_rtl_text(text)
 
                 is_heading = blk.type == BlockType.HEADING
                 fsize = 14 if is_heading else 11
-
-                # Render text
-                rect = fitz.Rect(MARGIN_X, y, PAGE_WIDTH - MARGIN_X, PAGE_HEIGHT - MARGIN_BOTTOM)
-                rc = page.insert_textbox(
-                    rect,
-                    text,
-                    fontsize=fsize,
-                    fontname="arabic",
-                    fontfile=font_file,
-                    align=fitz.TEXT_ALIGN_RIGHT,
-                )
-                # Approximate line height increment
-                lines_est = max(1, len(text) // 50 + text.count("\n"))
-                y += lines_est * (fsize + 6) + 10
+                page, y = insert_text(page, y, text, fsize, heading=is_heading)
 
         doc.save(str(output_path))
         doc.close()

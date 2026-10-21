@@ -25,8 +25,8 @@ def test_pdf_parsing_and_rendering(tmp_path: Path):
     sample_pdf_path = tmp_path / "sample.pdf"
     create_sample_pdf(sample_pdf_path)
 
-    # Parse PDF
-    parser = PdfParser()
+    # Parse PDF (pin paragraph granularity; user settings may differ)
+    parser = PdfParser(granularity="paragraph")
     book = parser.parse(sample_pdf_path)
 
     assert len(book.chapters) >= 1
@@ -64,7 +64,7 @@ def test_pdf_parser_skips_overlapping_duplicate_text_blocks(tmp_path: Path):
     doc.save(str(source_path))
     doc.close()
 
-    book = PdfParser().parse(source_path)
+    book = PdfParser(granularity="paragraph").parse(source_path)
 
     assert len(book.chapters) == 1
     assert [block.source_text for block in book.chapters[0].blocks] == [
